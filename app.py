@@ -1,22 +1,29 @@
 import streamlit as st
 
-st.set_page_config(page_title="URL Parameter Viewer", layout="centered")
-st.title("🔍 SUAVE URL Parameter Viewer")
+st.set_page_config(page_title="SUAVE Launcher", layout="centered")
+st.title("🧭 SUAVE Application Launcher")
 
-# ✅ Updated query param access
+# Parse URL parameters
 query_params = st.query_params
 
+st.subheader("🔍 URL Parameters")
 if query_params:
-    st.subheader("📦 Parsed Parameters")
-    for key, value in query_params.items():
-        # value is always a list, even if a single item
-        display_value = value[0] if len(value) == 1 else value
-        st.write(f"**{key}**: {display_value}")
+    for k, v in query_params.items():
+        st.write(f"**{k}**: {v[0] if len(v)==1 else v}")
 else:
-    st.warning("No URL parameters detected. Add parameters like `?user=...&csv=...` to the URL.")
+    st.warning("No parameters found. Try adding ?user=...&csv=... etc. to the URL.")
+
+# Application Launcher
+st.markdown("### 🚀 Available Applications")
+
+apps = {
+    "Arithmetic Operations": "arithmetic_app",
+    "Spatial Statistics": "spatial_stats_app"
+}
+
+for app_name, app_path in apps.items():
+    launch_url = f"/{app_path}"
+    st.markdown(f"- [{app_name}]({launch_url})")
 
 st.markdown("---")
-
-st.markdown("Example:")
-example_url = "?user=suavedemos&csv=suavedemos_Picasso_with_Colors.csv&params=none&dzc=https%3A%2F%2Fdzgen.sdsc.edu%2Fdzgen%2Flib-staging-uploads%2Fc460b12f7b6095533062e329f9701bb3%2Fcontent.dzc&activeobject=null&surveyurl=https%3A%2F%2Fsuave-net.sdsc.edu%2Fmain%2Ffile%3Dsuavedemos_Picasso_with_Colors.csv&views=grid%2Cbucket%2Ccrosstab%2Cmap%2Ctable%2Clist%2Cjupyter&view=grid"
-st.code(example_url, language="bash")
+st.caption("Powered by Streamlit")
