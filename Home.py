@@ -4,37 +4,33 @@ from urllib.parse import urlencode
 st.set_page_config(page_title="SUAVE App Launcher", layout="centered")
 st.title("🧭 SUAVE Application Launcher")
 
-query_params = st.query_params
-
-st.subheader("🔍 Parsed URL Parameters")
+# --- Read and display query parameters ---
+query_params = st.query_params  # for Streamlit ≥ 1.30
 if query_params:
+    st.subheader("🔍 Parsed URL Parameters")
     for k, v in query_params.items():
-        st.write(f"**{k}**: {v[0] if len(v) == 1 else v}")
+        st.write(f"**{k}**: {v[0] if isinstance(v, list) else v}")
 else:
-    st.warning("No parameters found. Add `?user=...&csv=...` to the URL.")
+    st.warning("No URL parameters found. Try launching with ?user=...&csv=...")
 
+# --- Construct query string ---
+param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
+
+# --- App Selection Buttons with parameter-preserving links ---
 st.markdown("---")
-
-# 🎯 Prepare parameter string for linking
-param_str = urlencode({k: v[0] for k, v in query_params.items()}) if query_params else ""
-
 st.markdown("### 🎛️ Choose an Application")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("#### ➕ Arithmetic Operations")
-    st.markdown(
-        f"[Go to Arithmetic Operations ➡️](./pages/1_Arithmetic_Operations.py?{param_str})",
-        unsafe_allow_html=True,
-    )
+    if st.button("➕ Arithmetic Operations"):
+        target_url = f"/Arithmetic_Operations?{param_str}"
+        st.markdown(f"<script>window.location.href = '{target_url}'</script>", unsafe_allow_html=True)
 
 with col2:
-    st.markdown("#### 📊 Spatial Statistics")
-    st.markdown(
-        f"[Go to Spatial Statistics ➡️](./pages/2_Spatial_Statistics.py?{param_str})",
-        unsafe_allow_html=True,
-    )
+    if st.button("📊 Spatial Statistics"):
+        target_url = f"/Spatial_Statistics?{param_str}"
+        st.markdown(f"<script>window.location.href = '{target_url}'</script>", unsafe_allow_html=True)
 
 st.markdown("---")
-st.caption("Note: Parameters will be preserved when switching between apps.")
+st.caption("🔁 Query parameters will persist as you move between applications.")
