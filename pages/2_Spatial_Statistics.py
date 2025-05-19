@@ -1,33 +1,38 @@
 import streamlit as st
-st.set_page_config(page_title="Spatial Statistics", layout="wide")  # MUST be first
+st.set_page_config(page_title="Spatial Statistics", layout="wide")  # MUST BE FIRST
 
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import requests
+import io
 from urllib.parse import urlencode
 from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
-import io
-import requests
+import folium
+import streamlit_folium
 
-# 📋 Header
+# --- Header ---
 st.title("📊 Spatial Statistics")
 st.markdown(f"🧪 **Streamlit version:** `{st.__version__}`")
 
-# --- Extract query parameters ---
-query_params = st.experimental_get_query_params()
-st.write("✅ DEBUG query params:", query_params)
+# --- Read Query Parameters ---
+try:
+    query_params = st.query_params  # For Streamlit ≥ 1.30
+except AttributeError:
+    query_params = st.experimental_get_query_params()  # Fallback for subpages
+
 user = query_params.get("user", [None])[0]
 csv_url = query_params.get("csv", [None])[0]
 
 if not csv_url:
-    st.error("No CSV URL provided. Please pass `?csv=...` in the URL.")
+    st.error("No CSV URL provided. Please pass ?csv=... in the URL.")
     st.stop()
 
 st.markdown(f"**User:** `{user}`")
 st.markdown(f"**CSV File:** `{csv_url}`")
 
-# --- Load CSV robustly via requests ---
+# --- Load CSV via requests ---
 csv_base_url = "https://suave-net.sdsc.edu/surveys/"
 csv_full_url = csv_base_url + csv_url
 st.markdown(f"🔗 **Trying URL:** `{csv_full_url}`")
@@ -40,14 +45,14 @@ except Exception as e:
     st.error(f"❌ Could not fetch CSV: {e}")
     st.stop()
 
-# --- Show columns and types ---
+# --- Preview columns and types ---
 st.subheader("📋 Column Check")
-df.columns = df.columns.str.strip()  # Strip whitespace
+df.columns = df.columns.str.strip()
 st.write(df.columns.tolist())
 st.write(df.dtypes)
 st.write(df.head(3))
 
-# --- Detect and parse geometry column ---
+# --- Geometry detection ---
 geometry_col = next((col for col in df.columns if "geometry" in col.lower()), None)
 if geometry_col is None:
     st.error("No geometry column found (e.g., 'geometry', 'geometry#hidden').")
@@ -59,9 +64,24 @@ except Exception as e:
     st.error(f"Failed to convert geometry: {e}")
     st.stop()
 
-# --- Map Preview ---
+# --- Folium map of polygons ---
 st.subheader("🗺️ Map of Features")
-st.map(gdf)
+
+# Compute map center
+centroid = gdf.geometry.centroid.unary_union.centroid
+center = [centroid.y, centroid.x]
+
+# Create interactive map
+m = folium.Map(location=center, zoom_start=4, tiles="CartoDB positron")
+
+# Add GeoJSON layer
+folium.GeoJson(
+    gdf,
+    tooltip=folium.GeoJsonTooltip(fields=gdf.select_dtypes(include='object').columns[:4].tolist(), aliases=None),
+    name="Polygons"
+).add_to(m)
+
+streamlit_folium.st_folium(m, width=800, height=500)
 
 # --- Variable selection ---
 numeric_cols = gdf.select_dtypes(include='number').columns.tolist()
@@ -85,7 +105,7 @@ if st.button("Run GWR") and dependent_var and independent_vars:
     coeffs_df = pd.DataFrame(gwr_results.params, columns=['Intercept'] + independent_vars)
     st.dataframe(coeffs_df)
 
-    # --- Optional: export coefficients ---
+    # --- Download coefficients ---
     buffer = io.StringIO()
     coeffs_df.to_csv(buffer, index=False)
     st.download_button(
@@ -95,7 +115,7 @@ if st.button("Run GWR") and dependent_var and independent_vars:
         mime="text/csv"
     )
 
-    # Optional: Residuals and predictions
+    # --- Download residuals ---
     residuals_df = pd.DataFrame({
         "geometry_id": df.get("geometry_id", df.index),
         "fitted": gwr_results.predy.flatten(),
@@ -113,7 +133,6 @@ if st.button("Run GWR") and dependent_var and independent_vars:
 
 # --- Return to Home ---
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
-
 button_css = """
 <style>
 .back-button {
