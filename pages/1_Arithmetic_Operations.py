@@ -6,10 +6,11 @@ import libpysal as ps
 from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
 
-st.set_page_config(page_title="Spatial Statistics", layout="wide")
+# st.set_page_config(page_title="Spatial Statistics", layout="wide")
 st.title("📊 Spatial Statistics")
 
 # Load CSV and geometry field
+query_params = st.query_params
 csv_url = st.query_params.get("csv", [None])[0]
 user = st.query_params.get("user", [None])[0]
 
@@ -17,8 +18,12 @@ if not csv_url:
     st.error("No CSV URL provided. Please pass `?csv=...` in the URL.")
     st.stop()
 
-st.write(f"User: **{user}**")
-st.write(f"CSV File: `{csv_url}`")
+# st.write(f"User: **{user}**")
+# st.write(f"CSV File: `{csv_url}`")
+
+st.markdown(f"**User:** {user}")
+st.markdown(f"**CSV File:** {csv_url}")
+
 
 try:
     df = pd.read_csv(f"https://suave-net.sdsc.edu/main/file={csv_url}")
@@ -60,3 +65,8 @@ if st.button("Run GWR") and dependent_var and independent_vars:
     st.write("### Coefficient Summary:")
     coeffs_df = pd.DataFrame(gwr_results.params, columns=['Intercept'] + independent_vars)
     st.dataframe(coeffs_df)
+
+from urllib.parse import urlencode
+
+param_str = urlencode({k: v[0] for k, v in st.query_params.items()})
+st.markdown(f"[⬅️ Return to Home](../Home.py?{param_str})", unsafe_allow_html=True)
