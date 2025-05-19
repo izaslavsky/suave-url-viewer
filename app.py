@@ -5,36 +5,25 @@ st.set_page_config(page_title="SUAVE App Launcher", layout="centered")
 st.title("🧭 SUAVE Application Launcher")
 
 query_params = st.query_params
-
-st.subheader("🔍 Parsed URL Parameters")
 if query_params:
+    st.subheader("🔍 Parsed URL Parameters")
     for k, v in query_params.items():
-        st.write(f"**{k}**: {v[0] if len(v) == 1 else v}")
+        st.write(f"**{k}**: {v[0] if isinstance(v, list) else v}")
 else:
-    st.warning("No parameters found. Add `?user=...&csv=...` to the URL.")
+    st.warning("No URL parameters found. Try launching with ?user=...&csv=...")
 
+param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
+
+# 🎛️ Choose App
 st.markdown("---")
-
-# 🎯 Prepare parameter string for linking
-param_str = urlencode({k: v[0] for k, v in query_params.items()}) if query_params else ""
-
 st.markdown("### 🎛️ Choose an Application")
-
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("#### ➕ Arithmetic Operations")
-    st.markdown(
-        f"[Go to Arithmetic Operations ➡️](./pages/1_Arithmetic_Operations.py?{param_str})",
-        unsafe_allow_html=True,
-    )
+    st.page_link("pages/1_Arithmetic_Operations.py", label="➕ Arithmetic Operations", icon="➕", params=query_params)
 
 with col2:
-    st.markdown("#### 📊 Spatial Statistics")
-    st.markdown(
-        f"[Go to Spatial Statistics ➡️](./pages/2_Spatial_Statistics.py?{param_str})",
-        unsafe_allow_html=True,
-    )
+    st.page_link("pages/2_Spatial_Statistics.py", label="📊 Spatial Statistics", icon="📊", params=query_params)
 
 st.markdown("---")
-st.caption("Note: Parameters will be preserved when switching between apps.")
+st.caption("🔁 Query parameters are passed to each app.")
