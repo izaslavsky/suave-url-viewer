@@ -7,6 +7,9 @@ from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
 import io
 
+st.markdown(f"🧪 **Streamlit version:** `{st.__version__}`")
+
+
 # --- Page Setup ---
 st.set_page_config(page_title="Spatial Statistics", layout="wide")
 st.title("📊 Spatial Statistics")
