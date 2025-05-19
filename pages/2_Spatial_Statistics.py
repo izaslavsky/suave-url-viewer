@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(page_title="Spatial Statistics", layout="wide")  # ✅ MUST BE FIRST
+
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -7,12 +9,10 @@ from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
 import io
 
+
 st.markdown(f"🧪 **Streamlit version:** `{st.__version__}`")
 
 
-# --- Page Setup ---
-st.set_page_config(page_title="Spatial Statistics", layout="wide")
-st.title("📊 Spatial Statistics")
 
 # --- Extract query parameters ---
 query_params = st.query_params
