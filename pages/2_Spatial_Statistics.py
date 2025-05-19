@@ -28,22 +28,21 @@ csv_full_url = csv_base_url + csv_url
 
 st.markdown(f"**Trying URL:** `{csv_full_url}`")
 
-try:
-    df = pd.read_csv(csv_full_url)
-except Exception as e:
-    st.error(f"❌ Failed to load CSV: {e}")
-    st.stop()
-
-
-
 # --- Load CSV ---
-try:
-    csv_base_url = "https://suave-net.sdsc.edu/surveys/"
-    df = pd.read_csv(csv_base_url + csv_url)
 
+import requests
+import io
+
+try:
+    response = requests.get(csv_full_url)
+    response.raise_for_status()  # Raises HTTPError if 4xx or 5xx
+    df = pd.read_csv(io.StringIO(response.text))
 except Exception as e:
-    st.error(f"Failed to load CSV: {e}")
+    st.error(f"❌ Could not fetch CSV via requests: {e}")
     st.stop()
+
+
+
 
 st.subheader("📋 Column Check")
 st.write(df.columns.tolist())
