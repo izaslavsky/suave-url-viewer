@@ -30,6 +30,12 @@ except Exception as e:
     st.error(f"Failed to load CSV: {e}")
     st.stop()
 
+st.subheader("📋 Column Check")
+st.write(df.columns.tolist())
+st.write(df.dtypes)
+st.write(df.head(3))
+
+
 # --- Detect and convert geometry ---
 geometry_col = next((col for col in df.columns if "geometry" in col.lower()), None)
 if geometry_col is None:
