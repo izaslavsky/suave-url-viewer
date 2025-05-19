@@ -25,7 +25,9 @@ st.markdown(f"**CSV File:** `{csv_url}`")
 
 # --- Load CSV ---
 try:
-    df = pd.read_csv(f"https://suave-net.sdsc.edu/main/file={csv_url}")
+    csv_base_url = "https://suave-net.sdsc.edu/surveys/"
+    df = pd.read_csv(csv_base_url + csv_url)
+
 except Exception as e:
     st.error(f"Failed to load CSV: {e}")
     st.stop()
