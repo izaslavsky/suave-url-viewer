@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="Spatial Statistics", layout="wide")  # ✅ MUST BE FIRST
+st.set_page_config(page_title="Spatial Statistics", layout="wide")  # MUST be first
 
 import pandas as pd
 import geopandas as gpd
@@ -8,11 +8,11 @@ from urllib.parse import urlencode
 from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
 import io
+import requests
 
-
+# 📋 Header
+st.title("📊 Spatial Statistics")
 st.markdown(f"🧪 **Streamlit version:** `{st.__version__}`")
-
-
 
 # --- Extract query parameters ---
 query_params = st.query_params
@@ -26,45 +26,37 @@ if not csv_url:
 st.markdown(f"**User:** `{user}`")
 st.markdown(f"**CSV File:** `{csv_url}`")
 
+# --- Load CSV robustly via requests ---
 csv_base_url = "https://suave-net.sdsc.edu/surveys/"
 csv_full_url = csv_base_url + csv_url
-
-st.markdown(f"**Trying URL:** `{csv_full_url}`")
-
-# --- Load CSV ---
-
-import requests
-import io
+st.markdown(f"🔗 **Trying URL:** `{csv_full_url}`")
 
 try:
     response = requests.get(csv_full_url)
-    response.raise_for_status()  # Raises HTTPError if 4xx or 5xx
+    response.raise_for_status()
     df = pd.read_csv(io.StringIO(response.text))
 except Exception as e:
-    st.error(f"❌ Could not fetch CSV via requests: {e}")
+    st.error(f"❌ Could not fetch CSV: {e}")
     st.stop()
 
-
-
-
+# --- Show columns and types ---
 st.subheader("📋 Column Check")
+df.columns = df.columns.str.strip()  # Strip whitespace
 st.write(df.columns.tolist())
 st.write(df.dtypes)
 st.write(df.head(3))
 
-
-# --- Detect and convert geometry ---
-# Strip all column names to avoid extra whitespace
-df.columns = df.columns.str.strip()
-
-# Detect first column that contains "geometry" (e.g. "geometry", "geometry#hidden")
+# --- Detect and parse geometry column ---
 geometry_col = next((col for col in df.columns if "geometry" in col.lower()), None)
-
 if geometry_col is None:
     st.error("No geometry column found (e.g., 'geometry', 'geometry#hidden').")
     st.stop()
 
-gdf = gpd.GeoDataFrame(df, geometry=gpd.GeoSeries.from_wkt(df[geometry_col]), crs="EPSG:4326")
+try:
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.GeoSeries.from_wkt(df[geometry_col]), crs="EPSG:4326")
+except Exception as e:
+    st.error(f"Failed to convert geometry: {e}")
+    st.stop()
 
 # --- Map Preview ---
 st.subheader("🗺️ Map of Features")
