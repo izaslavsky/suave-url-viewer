@@ -23,6 +23,19 @@ if not csv_url:
 st.markdown(f"**User:** `{user}`")
 st.markdown(f"**CSV File:** `{csv_url}`")
 
+csv_base_url = "https://suave-net.sdsc.edu/surveys/"
+csv_full_url = csv_base_url + csv_url
+
+st.markdown(f"**Trying URL:** `{csv_full_url}`")
+
+try:
+    df = pd.read_csv(csv_full_url)
+except Exception as e:
+    st.error(f"❌ Failed to load CSV: {e}")
+    st.stop()
+
+
+
 # --- Load CSV ---
 try:
     csv_base_url = "https://suave-net.sdsc.edu/surveys/"
@@ -39,9 +52,14 @@ st.write(df.head(3))
 
 
 # --- Detect and convert geometry ---
+# Strip all column names to avoid extra whitespace
+df.columns = df.columns.str.strip()
+
+# Detect first column that contains "geometry" (e.g. "geometry", "geometry#hidden")
 geometry_col = next((col for col in df.columns if "geometry" in col.lower()), None)
+
 if geometry_col is None:
-    st.error("No geometry column detected.")
+    st.error("No geometry column found (e.g., 'geometry', 'geometry#hidden').")
     st.stop()
 
 gdf = gpd.GeoDataFrame(df, geometry=gpd.GeoSeries.from_wkt(df[geometry_col]), crs="EPSG:4326")
