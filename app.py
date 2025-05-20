@@ -7,49 +7,70 @@ st.title("🧭 SUAVE Application Launcher")
 # --- Read and display query parameters ---
 query_params = st.query_params
 if query_params:
-    st.subheader("🔍 Parsed URL Parameters")
+    st.markdown("### <small>🔍 Parsed URL Parameters</small>", unsafe_allow_html=True)
     for k, v in query_params.items():
-        st.write(f"**{k}**: {v[0] if isinstance(v, list) else v}")
+        st.markdown(
+            f"<div style='font-size: 0.8em; margin-left: 1em;'>• <b>{k}</b>: {v[0] if isinstance(v, list) else v}</div>",
+            unsafe_allow_html=True,
+        )
 else:
     st.warning("No URL parameters found. Try launching with ?user=...&csv=...")
 
 # --- Construct query string ---
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
 
-# --- Fake buttons using styled HTML ---
+# --- Custom card style ---
+st.markdown("""
+<style>
+.card-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5em;
+    margin-top: 1em;
+}
+.card {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 1.2em;
+    width: 280px;
+    box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
+}
+.card a {
+    display: inline-block;
+    padding: 0.5em 1em;
+    margin-top: 0.6em;
+    background-color: #1f77b4;
+    color: white;
+    font-weight: bold;
+    border-radius: 5px;
+    text-decoration: none;
+}
+.card a:hover {
+    background-color: #135b91;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# --- Render cards ---
 st.markdown("---")
 st.markdown("### 🎛️ Choose an Application")
 
-# Define URLs
-arith_url = f"/Arithmetic_Operations?{param_str}"
-spatial_url = f"/Spatial_Statistics?{param_str}"
+st.markdown(f"""
+<div class='card-grid'>
+    <div class='card'>
+        <div style='font-size: 1.1em;'>➕ Arithmetic Operations</div>
+        <div style='font-size: 0.9em; margin-top: 0.5em;'>Computing derived variables and adding them to SuAVE</div>
+        <a href="/Arithmetic_Operations?{param_str}">Launch</a>
+    </div>
+    <div class='card'>
+        <div style='font-size: 1.1em;'>📊 Spatial Statistics</div>
+        <div style='font-size: 0.9em; margin-top: 0.5em;'>Geographically-Weighted Regression with Residuals and Autocorrelation Measures</div>
+        <a href="/Spatial_Statistics?{param_str}">Launch</a>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# Define custom button styles
-button_css = """
-<style>
-.app-button {
-    display: inline-block;
-    padding: 0.6em 1.2em;
-    margin: 0.4em;
-    font-size: 1.1em;
-    font-weight: bold;
-    color: white;
-    background-color: #4CAF50;
-    border: none;
-    border-radius: 8px;
-    text-decoration: none;
-    cursor: pointer;
-}
-.app-button:hover {
-    background-color: #45a049;
-}
-</style>
-"""
-
-# Render buttons
-st.markdown(button_css, unsafe_allow_html=True)
-st.markdown(f'<a class="app-button" href="{arith_url}">➕ Arithmetic Operations</a>', unsafe_allow_html=True)
-st.markdown(f'<a class="app-button" href="{spatial_url}">📊 Spatial Statistics</a>', unsafe_allow_html=True)
-
+# --- Footer ---
 st.markdown("---")
 st.caption("🔁 Query parameters will persist across apps.")
