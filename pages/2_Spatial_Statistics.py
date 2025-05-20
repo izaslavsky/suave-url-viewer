@@ -12,7 +12,6 @@ from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
 import folium
 import streamlit_folium
-import contextily as cx
 from shapely.geometry import Point
 from libpysal.weights import Queen, KNN
 from esda.moran import Moran, Moran_Local
