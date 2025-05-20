@@ -42,3 +42,6 @@ libpysal
 mgwr
 folium
 streamlit-folium
+esda
+branca
+shapely
