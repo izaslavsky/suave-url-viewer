@@ -22,6 +22,8 @@ import branca.colormap as cm
 query_params = st.query_params
 user = query_params.get("user", None)
 csv_filename = query_params.get("csv", None)
+survey_url = query_params.get("surveyurl", None)
+
 
 # ---- Page title and description ----
 st.title("📊 Spatial Statistics")
@@ -34,12 +36,13 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.markdown(f"👤 <span style='font-size: 0.85em;'>**User:** {user}</span>", unsafe_allow_html=True)
     st.markdown(f"📂 <span style='font-size: 0.85em;'>**CSV File:** {csv_filename}</span>", unsafe_allow_html=True)
 
-    if not csv_filename:
-        st.error("❌ No CSV filename provided. Use ?csv=... in the URL.")
+    if not csv_filename or not survey_url:
+        st.error("❌ Missing CSV filename or survey URL. Use ?csv=...&surveyurl=... in the URL.")
         st.stop()
 
-    csv_base_url = "https://suave-net.sdsc.edu/surveys/"
-    csv_url = csv_base_url + csv_filename
+    parsed = urlparse(survey_url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}/surveys/"
+    csv_url = base_url + csv_filename
     st.markdown(f"🔗 <span style='font-size: 0.85em;'>Trying URL: {csv_url}</span>", unsafe_allow_html=True)
 
     try:

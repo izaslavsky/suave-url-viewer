@@ -1,72 +1,153 @@
 import streamlit as st
+st.set_page_config(page_title="Arithmetic Operations", layout="wide")
+
+# ---- Import dependencies ----
 import pandas as pd
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import libpysal as ps
-from mgwr.gwr import GWR
-from mgwr.sel_bw import Sel_BW
+import requests
+import io
+from urllib.parse import urlencode, urlparse
+from datetime import datetime
 
-# st.set_page_config(page_title="Spatial Statistics", layout="wide")
-st.title("📊 Spatial Statistics")
-
-# Load CSV and geometry field
+# ---- Read query params from URL ----
 query_params = st.query_params
-csv_url = st.query_params.get("csv", [None])[0]
-user = st.query_params.get("user", [None])[0]
+user = query_params.get("user", None)
+csv_filename = query_params.get("csv", None)
+survey_url = query_params.get("surveyurl", None)
+dzc_file = query_params.get("dzc", None)
 
-if not csv_url:
-    st.error("No CSV URL provided. Please pass `?csv=...` in the URL.")
-    st.stop()
+# ---- Page title and description ----
+st.title("➕ Arithmetic Operations")
+st.markdown("**Create new derived variables using arithmetic formulas, and publish back to SuAVE.**")
 
-# st.write(f"User: **{user}**")
-# st.write(f"CSV File: `{csv_url}`")
+# ---- Collapsible diagnostics ----
+with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
+    st.markdown(f"🧪 <span style='font-size: 0.85em;'>**Streamlit version:** {st.__version__}</span>", unsafe_allow_html=True)
+    st.markdown(f"👤 <span style='font-size: 0.85em;'>**User:** {user}</span>", unsafe_allow_html=True)
+    st.markdown(f"📂 <span style='font-size: 0.85em;'>**CSV File:** {csv_filename}</span>", unsafe_allow_html=True)
 
-st.markdown(f"**User:** {user}")
-st.markdown(f"**CSV File:** {csv_url}")
+    if not csv_filename or not survey_url:
+        st.error("❌ Missing CSV filename or survey URL. Use ?csv=...&surveyurl=... in the URL.")
+        st.stop()
 
+    parsed = urlparse(survey_url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}/surveys/"
+    csv_url = base_url + csv_filename
+    st.markdown(f"🔗 <span style='font-size: 0.85em;'>Trying URL: {csv_url}</span>", unsafe_allow_html=True)
 
-try:
-    df = pd.read_csv(f"https://suave-net.sdsc.edu/main/file={csv_url}")
-except Exception as e:
-    st.error(f"Failed to load CSV: {e}")
-    st.stop()
+    try:
+        response = requests.get(csv_url)
+        response.raise_for_status()
+        df = pd.read_csv(io.StringIO(response.text))
+    except Exception as e:
+        st.error(f"❌ Could not fetch CSV: {e}")
+        st.stop()
 
-# Detect geometry column
-geometry_col = next((col for col in df.columns if "geometry" in col.lower()), None)
+    st.markdown("<span style='font-size: 0.9em;'>📋 Column Check</span>", unsafe_allow_html=True)
+    df.columns = df.columns.str.strip()
+    st.write(df.columns.tolist())
+    st.write(df.dtypes.head())
+    st.write(df.head(2))
 
-if geometry_col is None:
-    st.error("No geometry field detected.")
-    st.stop()
+# ---- Select columns and define operation ----
+st.markdown("---")
+st.subheader("🧮 Define a New Derived Variable")
 
-gdf = gpd.GeoDataFrame(df, geometry=gpd.GeoSeries.from_wkt(df[geometry_col]))
-gdf = gdf.set_crs(epsg=4326)
+numeric_cols = df.select_dtypes(include='number').columns.tolist()
+col1 = st.selectbox("➕ First Operand", numeric_cols)
+operation = st.selectbox("⚙️ Operation", ["+", "-", "*", "/"])
+col2 = st.selectbox("➕ Second Operand", numeric_cols)
+new_var_base = st.text_input("📝 Name for the New Variable", value="new_var")
+new_var = new_var_base + " #number"
 
-st.write("## 🗺️ Map of Features")
-st.map(gdf)
+if st.button("▶️ Compute"):
+    try:
+        if operation == "+":
+            df[new_var] = df[col1] + df[col2]
+        elif operation == "-":
+            df[new_var] = df[col1] - df[col2]
+        elif operation == "*":
+            df[new_var] = df[col1] * df[col2]
+        elif operation == "/":
+            df[new_var] = df[col1] / df[col2]
+        df[new_var] = df[new_var].where(df[new_var].notna(), '')  # Blank for errors
+        st.success(f"✅ New column '{new_var}' added.")
+        st.dataframe(df[[col1, col2, new_var]].head())
+    except Exception as e:
+        st.error(f"❌ Error computing new variable: {e}")
 
-# Variable selection
-numeric_cols = gdf.select_dtypes(include='number').columns.tolist()
-dependent_var = st.selectbox("Select Dependent Variable", numeric_cols)
-independent_vars = st.multiselect("Select Independent Variables", numeric_cols, default=numeric_cols[:2])
+# ---- Save and publish back ----
+st.markdown("---")
+st.subheader("📤 Publish Back to SuAVE")
+auth_user = st.text_input("🔐 SuAVE Login:")
+auth_token = st.text_input("🔑 API Token or Password:", type="password")
 
-# Run GWR
-if st.button("Run GWR") and dependent_var and independent_vars:
-    coords = list(zip(gdf.geometry.x, gdf.geometry.y))
-    y = gdf[[dependent_var]].values
-    X = gdf[independent_vars].values
+base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
+suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
-    bw = Sel_BW(coords, y, X).search()
-    gwr_model = GWR(coords, y, X, bw=bw)
-    gwr_results = gwr_model.fit()
+if st.button("📦 Upload to SuAVE"):
+    if not survey_name or not auth_user or not auth_token:
+        st.warning("⚠️ Please fill in all fields before uploading.")
+    else:
+        try:
+            parsed = urlparse(survey_url)
+            referer = survey_url.split("/main")[0] + "/"
+            upload_url = referer + "uploadCSV"
 
-    st.write(f"Bandwidth selected: {bw}")
-    st.write("R²:", gwr_results.R2)
+            csv_buffer = io.StringIO()
+            df.to_csv(csv_buffer, index=False)
+            csv_buffer.seek(0)
 
-    st.write("### Coefficient Summary:")
-    coeffs_df = pd.DataFrame(gwr_results.params, columns=['Intercept'] + independent_vars)
-    st.dataframe(coeffs_df)
+            files = {
+                "file": (f"{survey_name}.csv", csv_buffer.getvalue())
+            }
+            data = {
+                "user": auth_user,
+                "password": auth_token,
+                "name": survey_name
+            }
+            if dzc_file:
+                data["dzc"] = dzc_file
 
-from urllib.parse import urlencode
+            headers = {
+                "User-Agent": "suave user agent",
+                "referer": referer
+            }
 
-param_str = urlencode({k: v[0] for k, v in st.query_params.items()})
-st.markdown(f"[⬅️ Return to Home](../Home.py?{param_str})", unsafe_allow_html=True)
+            r = requests.post(upload_url, files=files, data=data, headers=headers)
+
+            if r.status_code == 200:
+                new_survey_url = f"{referer}main/file={auth_user}_{survey_name}.csv"
+                st.success("✅ Survey uploaded successfully!")
+                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
+            elif r.status_code == 401:
+                st.error("❌ Authentication failed. Please check your SuAVE credentials.")
+            else:
+                st.error(f"❌ Upload failed: {r.status_code} — {r.reason}")
+        except Exception as e:
+            st.error(f"❌ Failed to upload: {e}")
+
+# ---- Return to Home button ----
+param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
+button_css = """
+<style>
+.back-button {
+    display: inline-block;
+    padding: 0.6em 1.2em;
+    margin-top: 2em;
+    font-size: 1.1em;
+    font-weight: bold;
+    color: white !important;
+    background-color: #1f77b4;
+    border: none;
+    border-radius: 8px;
+    text-decoration: none;
+}
+.back-button:hover {
+    background-color: #16699b;
+    color: white !important;
+}
+</style>
+"""
+st.markdown(button_css, unsafe_allow_html=True)
+st.markdown(f'<a href="/?{param_str}" class="back-button">⬅️ Return to Home</a>', unsafe_allow_html=True)
