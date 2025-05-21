@@ -69,7 +69,7 @@ if st.button("▶️ Compute"):
             df[new_var] = df[col1] * df[col2]
         elif operation == "/":
             df[new_var] = df[col1] / df[col2]
-        df[new_var] = df[new_var].where(df[new_var].notna(), '')  # Blank for errors
+        df[new_var] = df[new_var].where(df[new_var].notna(), '')
         st.success(f"✅ New column '{new_var}' added.")
         st.dataframe(df[[col1, col2, new_var]].head())
     except Exception as e:
@@ -79,14 +79,14 @@ if st.button("▶️ Compute"):
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
 auth_user = st.text_input("🔐 SuAVE Login:")
-auth_token = st.text_input("🔑 API Token or Password:", type="password")
+auth_password = st.text_input("🔑 SuAVE Password:", type="password")
 
 base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
 suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
 if st.button("📦 Upload to SuAVE"):
-    if not survey_name or not auth_user or not auth_token:
+    if not survey_name or not auth_user or not auth_password:
         st.warning("⚠️ Please fill in all fields before uploading.")
     else:
         try:
@@ -98,32 +98,43 @@ if st.button("📦 Upload to SuAVE"):
             df.to_csv(csv_buffer, index=False)
             csv_buffer.seek(0)
 
-            files = {
-                "file": (f"{survey_name}.csv", csv_buffer.getvalue())
-            }
-            data = {
-                "user": auth_user,
-                "password": auth_token,
-                "name": survey_name
-            }
-            if dzc_file:
-                data["dzc"] = dzc_file
-
+            s = requests.Session()
             headers = {
                 "User-Agent": "suave user agent",
                 "referer": referer
             }
 
-            r = requests.post(upload_url, files=files, data=data, headers=headers)
+            auth_response = s.post(
+                referer,
+                headers=headers,
+                data={
+                    "user": auth_user,
+                    "pass": auth_password,
+                    "remember-me": "true"
+                }
+            )
 
-            if r.status_code == 200:
-                new_survey_url = f"{referer}main/file={auth_user}_{survey_name}.csv"
-                st.success("✅ Survey uploaded successfully!")
-                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
-            elif r.status_code == 401:
+            if auth_response.status_code != 200:
                 st.error("❌ Authentication failed. Please check your SuAVE credentials.")
             else:
-                st.error(f"❌ Upload failed: {r.status_code} — {r.reason}")
+                files = {
+                    "file": (f"{survey_name}.csv", csv_buffer.getvalue())
+                }
+                data = {
+                    "name": survey_name,
+                    "user": auth_user
+                }
+                if dzc_file:
+                    data["dzc"] = dzc_file
+
+                r = s.post(upload_url, files=files, data=data, headers=headers)
+
+                if r.status_code == 200:
+                    new_survey_url = f"{referer}main/file={auth_user}_{survey_name}.csv"
+                    st.success("✅ Survey uploaded successfully!")
+                    st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
+                else:
+                    st.error(f"❌ Upload failed: {r.status_code} — {r.reason}")
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
