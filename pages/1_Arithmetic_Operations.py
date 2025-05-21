@@ -48,7 +48,7 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.write(df.dtypes.head())
     st.write(df.head(2))
 
-# ---- Select columns and define operation ----
+# ---- Define new derived variable ----
 st.markdown("---")
 st.subheader("🧮 Define a New Derived Variable")
 
@@ -75,9 +75,10 @@ if st.button("▶️ Compute"):
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
 
-# ---- Save and publish back ----
+# ---- Upload to SuAVE ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
+
 auth_user = st.text_input("🔐 SuAVE Login:")
 auth_password = st.text_input("🔑 SuAVE Password:", type="password")
 
@@ -114,8 +115,8 @@ if st.button("📦 Upload to SuAVE"):
                 }
             )
 
-            if auth_response.status_code != 200:
-                st.error("❌ Authentication failed. Please check your SuAVE credentials.")
+            if auth_response.status_code != 200 or "logout" not in auth_response.text.lower():
+                st.error("❌ Authentication failed or session not established. Please check credentials.")
             else:
                 files = {
                     "file": (f"{survey_name}.csv", csv_buffer.getvalue())
@@ -127,24 +128,24 @@ if st.button("📦 Upload to SuAVE"):
                 if dzc_file:
                     data["dzc"] = dzc_file
 
-                r = s.post(upload_url, files=files, data=data, headers=headers)
+                upload_response = s.post(upload_url, files=files, data=data, headers=headers)
 
-                if r.status_code == 200:
+                if upload_response.status_code == 200:
                     new_survey_url = f"{referer}main/file={auth_user}_{survey_name}.csv"
                     st.success("✅ Survey uploaded successfully!")
                     st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
                 else:
-                    st.error(f"❌ Upload failed: {r.status_code} — {r.reason}")
+                    st.error(f"❌ Upload failed: {upload_response.status_code} — {upload_response.reason}")
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
 # ---- Return to Home button ----
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
-button_css = """
+st.markdown("""
 <style>
 .back-button {
     display: inline-block;
-    padding: 0.6em 1.2em;
+    padding: 0.6em  1.2em;
     margin-top: 2em;
     font-size: 1.1em;
     font-weight: bold;
@@ -159,6 +160,5 @@ button_css = """
     color: white !important;
 }
 </style>
-"""
-st.markdown(button_css, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 st.markdown(f'<a href="/?{param_str}" class="back-button">⬅️ Return to Home</a>', unsafe_allow_html=True)
