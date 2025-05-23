@@ -123,7 +123,15 @@ if st.button("📦 Upload to SuAVE"):
                 # Prepare CSV and upload
                 
                 # Use modified_df if it exists
-                df_to_upload = st.session_state.get("modified_df", df)
+
+
+                # Ensure that we upload the DataFrame that includes the computed variable
+                if "last_new_var" in st.session_state and st.session_state.last_new_var in df.columns:
+                    df_to_upload = df
+                elif "modified_df" in st.session_state:
+                    df_to_upload = st.session_state.modified_df
+                else:
+                    df_to_upload = df
 
                 csv_buffer = io.StringIO()
                 df_to_upload.to_csv(csv_buffer, index=False)
