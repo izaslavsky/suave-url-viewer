@@ -1,28 +1,34 @@
 import streamlit as st
-st.set_page_config(page_title="Arithmetic Operations", layout="wide")
-
 import pandas as pd
 import requests
 import io
 from urllib.parse import urlencode, urlparse
 from datetime import datetime
 
-# ---- Read query params from URL ----
+# -----------------------------
+# Page config and header
+# -----------------------------
+st.set_page_config(page_title="Arithmetic Operations", layout="wide")
+st.title("➕ Arithmetic Operations")
+st.markdown("**Create new derived variables using arithmetic formulas, and publish back to SuAVE.**")
+
+# -----------------------------
+# Read query params
+# -----------------------------
 query_params = st.query_params
 user = query_params.get("user", None)
 csv_filename = query_params.get("csv", None)
 survey_url = query_params.get("surveyurl", None)
 dzc_file = query_params.get("dzc", None)
 
-# ---- Title and description ----
-st.title("➕ Arithmetic Operations")
-st.markdown("**Create new derived variables using arithmetic formulas, and publish back to SuAVE.**")
-
-# ---- Collapsible diagnostics ----
+# -----------------------------
+# Diagnostics and CSV loading
+# -----------------------------
 with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
-    st.markdown(f"🧪 <span style='font-size: 0.85em;'>**Streamlit version:** {st.__version__}</span>", unsafe_allow_html=True)
-    st.markdown(f"👤 <span style='font-size: 0.85em;'>**User:** {user}</span>", unsafe_allow_html=True)
-    st.markdown(f"📂 <span style='font-size: 0.85em;'>**CSV File:** {csv_filename}</span>", unsafe_allow_html=True)
+    st.markdown(f"🧪 **Streamlit version:** `{st.__version__}`")
+    st.markdown(f"👤 **User:** `{user}`")
+    st.markdown(f"📂 **CSV File:** `{csv_filename}`")
+    st.markdown(f"🌐 **Survey URL:** `{survey_url}`")
 
     if not csv_filename or not survey_url:
         st.error("❌ Missing CSV filename or survey URL. Use ?csv=...&surveyurl=... in the URL.")
@@ -31,7 +37,7 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     parsed = urlparse(survey_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}/surveys/"
     csv_url = base_url + csv_filename
-    st.markdown(f"🔗 <span style='font-size: 0.85em;'>Trying URL: {csv_url}</span>", unsafe_allow_html=True)
+    st.markdown(f"🔗 Trying to load: `{csv_url}`")
 
     try:
         response = requests.get(csv_url)
@@ -41,13 +47,15 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
         st.error(f"❌ Could not fetch CSV: {e}")
         st.stop()
 
-    st.markdown("<span style='font-size: 0.9em;'>📋 Column Check</span>", unsafe_allow_html=True)
+    st.markdown("📋 Column Check:")
     df.columns = df.columns.str.strip()
     st.write(df.columns.tolist())
     st.write(df.dtypes.head())
     st.write(df.head(2))
 
-# ---- Select columns and define operation ----
+# -----------------------------
+# Define new variable
+# -----------------------------
 st.markdown("---")
 st.subheader("🧮 Define a New Derived Variable")
 
@@ -68,39 +76,39 @@ if st.button("▶️ Compute"):
             df[new_var] = df[col1] * df[col2]
         elif operation == "/":
             df[new_var] = df[col1] / df[col2]
-
-        df[new_var] = df[new_var].where(df[new_var].notna(), '')
+        df[new_var] = df[new_var].where(df[new_var].notna(), "")
         st.success(f"✅ New column '{new_var}' added.")
         st.dataframe(df[[col1, col2, new_var]].head())
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
 
-# ---- Upload to SuAVE ----
+# -----------------------------
+# Upload to SuAVE
+# -----------------------------
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
 
-# Help for session cookie
-with st.expander("❓ How to find your SuAVE session cookie"):
+# Help box for cookie retrieval
+with st.expander("ℹ️ Help: How to Get Your Session Cookie"):
     st.markdown("""
-To upload, you must be **logged in to [https://suave-net.sdsc.edu](https://suave-net.sdsc.edu)** in the same browser. Then:
-1. Open Developer Tools:
-   - **Chrome/Edge/Brave**: `Ctrl+Shift+I` or `Cmd+Option+I`
-   - **Firefox**: `F12` or `Ctrl+Shift+I`
-2. Go to the **Application** tab (or **Storage** in Firefox)
-3. In the sidebar, expand **Cookies** → `https://suave-net.sdsc.edu`
-4. Find the **`connect.sid`** cookie and copy its **Value**
-5. Paste that value below.
+1. Open [https://suave-net.sdsc.edu](https://suave-net.sdsc.edu) in the **same browser** where you're using this app.
+2. Log in to your SuAVE account (if not already logged in).
+3. Open Developer Tools (press `F12` or right-click → Inspect).
+4. Go to the **Application** tab → **Cookies** → `https://suave-net.sdsc.edu`.
+5. Find the cookie named **`connect.sid`**.
+6. **Copy its decoded value** (not the URL-encoded string).
+7. Paste it below.
 """)
 
-session_cookie = st.text_input("🔐 Paste your SuAVE session cookie (`connect.sid`) here", type="password")
+cookie_input = st.text_input("🍪 Paste your decoded `connect.sid` cookie here:")
 
 base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
 suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
 if st.button("📦 Upload to SuAVE"):
-    if not session_cookie or not survey_name:
-        st.warning("⚠️ Please fill in both the session cookie and survey name.")
+    if not cookie_input or not survey_name:
+        st.warning("⚠️ Please fill in both cookie and survey name before uploading.")
     else:
         try:
             referer = survey_url.split("/main")[0] + "/"
@@ -109,6 +117,14 @@ if st.button("📦 Upload to SuAVE"):
             csv_buffer = io.StringIO()
             df.to_csv(csv_buffer, index=False)
             csv_buffer.seek(0)
+
+            session = requests.Session()
+            session.cookies.set("connect.sid", cookie_input.strip(), domain="suave-net.sdsc.edu")
+
+            headers = {
+                "User-Agent": "suave user agent",
+                "referer": referer
+            }
 
             files = {
                 "file": (f"{survey_name}.csv", csv_buffer.getvalue())
@@ -120,33 +136,27 @@ if st.button("📦 Upload to SuAVE"):
             if dzc_file:
                 data["dzc"] = dzc_file
 
-            headers = {
-                "User-Agent": "suave user agent",
-                "referer": referer
-            }
-            cookies = {
-                "connect.sid": session_cookie
-            }
-
-            upload_response = requests.post(upload_url, files=files, data=data, headers=headers, cookies=cookies)
+            upload_response = session.post(upload_url, files=files, data=data, headers=headers)
 
             if upload_response.status_code == 200:
-                new_survey_url = f"{referer}main/file={user}_{survey_name}.csv"
+                new_url = f"{referer}main/file={user}_{survey_name}.csv"
                 st.success("✅ Survey uploaded successfully!")
-                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
+                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_url})")
             else:
                 st.error(f"❌ Upload failed ({upload_response.status_code} — {upload_response.reason}). Please ensure you're logged in.")
-                st.markdown(f"🔍 **Server Response:**\n```\n{upload_response.text}\n```")
+                st.markdown(f"🔍 Server Response:\n\n```\n{upload_response.text}\n```")
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
-# ---- Return to Home button ----
+# -----------------------------
+# Return to Home button
+# -----------------------------
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
 button_css = """
 <style>
 .back-button {
     display: inline-block;
-    padding: 0.6em 1.2em;
+    padding: 0.6em  1.2em;
     margin-top: 2em;
     font-size: 1.1em;
     font-weight: bold;
