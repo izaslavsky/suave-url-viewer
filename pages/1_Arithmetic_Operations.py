@@ -77,7 +77,7 @@ if st.button("▶️ Compute"):
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
 
-# ---- Save and publish section ----
+# ---- Save and publish back ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
 
@@ -85,15 +85,15 @@ base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
 suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
-st.info("ℹ️ To upload, please ensure you are logged in to [SuAVE](https://suave-net.sdsc.edu/) in the same browser.")
+st.markdown("🔐 Please make sure you're already logged in to [SuAVE](https://suave-net.sdsc.edu) **in the same browser** before uploading.")
 
 if st.button("📦 Upload to SuAVE"):
-    if not survey_name or not user:
-        st.warning("⚠️ Survey name and user must be specified.")
+    if not survey_name:
+        st.warning("⚠️ Please enter a name for the new survey.")
     else:
         try:
             parsed = urlparse(survey_url)
-            referer = f"{parsed.scheme}://{parsed.netloc}/"
+            referer = survey_url.split("/main")[0] + "/"
             upload_url = referer + "uploadCSV"
 
             csv_buffer = io.StringIO()
@@ -121,10 +121,12 @@ if st.button("📦 Upload to SuAVE"):
             if upload_response.status_code == 200:
                 new_survey_url = f"{referer}main/file={user}_{survey_name}.csv"
                 st.success("✅ Survey uploaded successfully!")
-                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})", unsafe_allow_html=True)
+                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
             else:
-                st.error(f"❌ Upload failed ({upload_response.status_code} — {upload_response.reason}). "
-                         f"Please ensure you are logged in to SuAVE in the same browser.")
+                st.error(f"❌ Upload failed ({upload_response.status_code} — {upload_response.reason}).")
+                st.markdown("**Server response:**")
+                st.code(upload_response.text, language='text')
+
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
