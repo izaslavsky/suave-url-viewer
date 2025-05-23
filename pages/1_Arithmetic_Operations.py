@@ -48,7 +48,7 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.write(df.dtypes.head())
     st.write(df.head(2))
 
-# ---- Define new derived variable ----
+# ---- Select columns and define operation ----
 st.markdown("---")
 st.subheader("🧮 Define a New Derived Variable")
 
@@ -75,19 +75,17 @@ if st.button("▶️ Compute"):
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
 
-# ---- Upload to SuAVE ----
+# ---- Save and publish back ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
-
-auth_user = st.text_input("🔐 SuAVE Login:")
-auth_password = st.text_input("🔑 SuAVE Password:", type="password")
+st.markdown("Ensure you are logged into SuAVE in the same browser session before clicking upload.")
 
 base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
 suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
 if st.button("📦 Upload to SuAVE"):
-    if not survey_name or not auth_user or not auth_password:
+    if not survey_name or not user:
         st.warning("⚠️ Please fill in all fields before uploading.")
     else:
         try:
@@ -99,53 +97,40 @@ if st.button("📦 Upload to SuAVE"):
             df.to_csv(csv_buffer, index=False)
             csv_buffer.seek(0)
 
-            s = requests.Session()
             headers = {
                 "User-Agent": "suave user agent",
                 "referer": referer
             }
 
-            auth_response = s.post(
-                referer,
-                headers=headers,
-                data={
-                    "user": auth_user,
-                    "pass": auth_password,
-                    "remember-me": "true"
-                }
-            )
+            s = requests.Session()
+            files = {
+                "file": (f"{survey_name}.csv", csv_buffer.getvalue())
+            }
+            data = {
+                "name": survey_name,
+                "user": user
+            }
+            if dzc_file:
+                data["dzc"] = dzc_file
 
-            if auth_response.status_code != 200 or "logout" not in auth_response.text.lower():
-                st.error("❌ Authentication failed or session not established. Please check credentials.")
+            upload_response = s.post(upload_url, files=files, data=data, headers=headers)
+
+            if upload_response.status_code == 200:
+                new_survey_url = f"{referer}main/file={user}_{survey_name}.csv"
+                st.success("✅ Survey uploaded successfully!")
+                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
             else:
-                files = {
-                    "file": (f"{survey_name}.csv", csv_buffer.getvalue())
-                }
-                data = {
-                    "name": survey_name,
-                    "user": auth_user
-                }
-                if dzc_file:
-                    data["dzc"] = dzc_file
-
-                upload_response = s.post(upload_url, files=files, data=data, headers=headers)
-
-                if upload_response.status_code == 200:
-                    new_survey_url = f"{referer}main/file={auth_user}_{survey_name}.csv"
-                    st.success("✅ Survey uploaded successfully!")
-                    st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
-                else:
-                    st.error(f"❌ Upload failed: {upload_response.status_code} — {upload_response.reason}")
+                st.error(f"❌ Upload failed: {upload_response.status_code} — {upload_response.reason}")
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
 # ---- Return to Home button ----
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
-st.markdown("""
+button_css = '''
 <style>
 .back-button {
     display: inline-block;
-    padding: 0.6em  1.2em;
+    padding: 0.6em 1.2em;
     margin-top: 2em;
     font-size: 1.1em;
     font-weight: bold;
@@ -160,5 +145,6 @@ st.markdown("""
     color: white !important;
 }
 </style>
-""", unsafe_allow_html=True)
+'''
+st.markdown(button_css, unsafe_allow_html=True)
 st.markdown(f'<a href="/?{param_str}" class="back-button">⬅️ Return to Home</a>', unsafe_allow_html=True)
