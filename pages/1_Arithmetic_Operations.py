@@ -1,6 +1,9 @@
 import logging
+from io import StringIO
 
-logging.basicConfig(level=logging.DEBUG)
+log_stream = StringIO()
+logging.basicConfig(stream=log_stream, level=logging.DEBUG)
+
 
 import streamlit as st
 st.set_page_config(page_title="Arithmetic Operations", layout="wide")
@@ -141,6 +144,9 @@ if st.button("📦 Upload to SuAVE"):
                 data["dzc"] = dzc_file
 
             upload_response = session.post(upload_url, files=files, data=data, headers=headers)
+            
+            st.expander("🔍 Debug Log").code(log_stream.getvalue())
+
 
             if upload_response.status_code == 200:
                 new_url = f"{referer}main/file={user}_{survey_name}.csv"
