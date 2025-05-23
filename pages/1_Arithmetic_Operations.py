@@ -1,4 +1,9 @@
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
 import streamlit as st
+st.set_page_config(page_title="Arithmetic Operations", layout="wide")
 import pandas as pd
 import requests
 import io
@@ -8,7 +13,6 @@ from datetime import datetime
 # -----------------------------
 # Page config and header
 # -----------------------------
-st.set_page_config(page_title="Arithmetic Operations", layout="wide")
 st.title("➕ Arithmetic Operations")
 st.markdown("**Create new derived variables using arithmetic formulas, and publish back to SuAVE.**")
 
