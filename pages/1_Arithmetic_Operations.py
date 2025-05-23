@@ -53,33 +53,53 @@ st.markdown("---")
 st.subheader("🧮 Define a New Derived Variable")
 
 numeric_cols = df.select_dtypes(include='number').columns.tolist()
-col1 = st.selectbox("➕ First Operand", numeric_cols)
-operation = st.selectbox("⚙️ Operation", ["+", "-", "*", "/"])
-col2 = st.selectbox("➕ Second Operand", numeric_cols)
+mode = st.radio("Select Operation Type", ["Binary (e.g. A + B)", "Monadic (e.g. log(A))"])
+
+if mode == "Binary (e.g. A + B)":
+    col1 = st.selectbox("➕ First Operand", numeric_cols, key="bin_col1")
+    operation = st.selectbox("⚙️ Operation", ["+", "-", "*", "/"], key="bin_op")
+    col2 = st.selectbox("➕ Second Operand", numeric_cols, key="bin_col2")
+else:
+    monadic_op = st.selectbox("🔁 Unary Operation", ["log", "sqrt", "abs", "square", "negate"], key="mon_op")
+    col1 = st.selectbox("🔘 Column to Transform", numeric_cols, key="mono_col")
+
 new_var_base = st.text_input("📝 Name for the New Variable", value="new_var")
 new_var = new_var_base.strip() + " #number"
+round_digits = st.slider("🔢 Decimal places to round", 0, 6, 2)
 
 if st.button("▶️ Compute"):
     try:
-        if operation == "+":
-            df[new_var] = df[col1] + df[col2]
-        elif operation == "-":
-            df[new_var] = df[col1] - df[col2]
-        elif operation == "*":
-            df[new_var] = df[col1] * df[col2]
-        elif operation == "/":
-            df[new_var] = df[col1] / df[col2]
-        df[new_var] = df[new_var].where(df[new_var].notna(), '')
+        if mode.startswith("Binary"):
+            if operation == "+":
+                df[new_var] = df[col1] + df[col2]
+            elif operation == "-":
+                df[new_var] = df[col1] - df[col2]
+            elif operation == "*":
+                df[new_var] = df[col1] * df[col2]
+            elif operation == "/":
+                df[new_var] = df[col1] / df[col2]
+        else:
+            if monadic_op == "log":
+                df[new_var] = np.log(df[col1])
+            elif monadic_op == "sqrt":
+                df[new_var] = np.sqrt(df[col1])
+            elif monadic_op == "abs":
+                df[new_var] = np.abs(df[col1])
+            elif monadic_op == "square":
+                df[new_var] = df[col1] ** 2
+            elif monadic_op == "negate":
+                df[new_var] = -df[col1]
 
-        # ✅ Save the modified DataFrame
+        df[new_var] = df[new_var].round(round_digits).where(df[new_var].notna(), '')
+
         st.session_state.modified_df = df.copy()
         st.session_state.last_new_var = new_var
 
         st.success(f"✅ New column '{new_var}' added.")
-        st.dataframe(df[[col1, col2, new_var]].head())
+        st.dataframe(df[[col1, new_var]].head())
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
-
+        
 # ---- Upload to SuAVE ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
