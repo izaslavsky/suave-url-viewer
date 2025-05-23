@@ -1,12 +1,12 @@
 import streamlit as st
-st.set_page_config(page_title="Arithmetic Operations", layout="wide")
-
-# ---- Import dependencies ----
 import pandas as pd
 import requests
 import io
 from urllib.parse import urlencode, urlparse
 from datetime import datetime
+
+# ---- Configure page ----
+st.set_page_config(page_title="Arithmetic Operations", layout="wide")
 
 # ---- Read query params from URL ----
 query_params = st.query_params
@@ -19,7 +19,7 @@ dzc_file = query_params.get("dzc", None)
 st.title("➕ Arithmetic Operations")
 st.markdown("**Create new derived variables using arithmetic formulas, and publish back to SuAVE.**")
 
-# ---- Diagnostics and Input Info ----
+# ---- Diagnostics section (collapsible) ----
 with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.markdown(f"🧪 <span style='font-size: 0.85em;'>**Streamlit version:** {st.__version__}</span>", unsafe_allow_html=True)
     st.markdown(f"👤 <span style='font-size: 0.85em;'>**User:** {user}</span>", unsafe_allow_html=True)
@@ -48,7 +48,7 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.write(df.dtypes.head())
     st.write(df.head(2))
 
-# ---- Select columns and define operation ----
+# ---- Derived variable creation ----
 st.markdown("---")
 st.subheader("🧮 Define a New Derived Variable")
 
@@ -70,13 +70,14 @@ if st.button("▶️ Compute"):
         elif operation == "/":
             df[new_var] = df[col1] / df[col2]
 
-        df[new_var] = df[new_var].where(df[new_var].notna(), '')  # leave blank if NaN
+        # Replace NaNs with empty strings
+        df[new_var] = df[new_var].where(pd.notnull(df[new_var]), '')
         st.success(f"✅ New column '{new_var}' added.")
         st.dataframe(df[[col1, col2, new_var]].head())
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
 
-# ---- Save and publish back ----
+# ---- Save and publish section ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
 
@@ -84,18 +85,17 @@ base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
 suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
-st.markdown("🔐 Make sure you are **logged in to SuAVE** in this browser before publishing. The app does not request your password.")
+st.info("ℹ️ To upload, please ensure you are logged in to [SuAVE](https://suave-net.sdsc.edu/) in the same browser.")
 
 if st.button("📦 Upload to SuAVE"):
     if not survey_name or not user:
-        st.warning("⚠️ Please enter a valid survey name and user.")
+        st.warning("⚠️ Survey name and user must be specified.")
     else:
         try:
             parsed = urlparse(survey_url)
-            referer = survey_url.split("/main")[0] + "/"
+            referer = f"{parsed.scheme}://{parsed.netloc}/"
             upload_url = referer + "uploadCSV"
 
-            # Save CSV to memory
             csv_buffer = io.StringIO()
             df.to_csv(csv_buffer, index=False)
             csv_buffer.seek(0)
@@ -106,7 +106,6 @@ if st.button("📦 Upload to SuAVE"):
                 "referer": referer
             }
 
-            # Use existing browser session authentication
             files = {
                 "file": (f"{survey_name}.csv", csv_buffer.getvalue())
             }
@@ -122,11 +121,10 @@ if st.button("📦 Upload to SuAVE"):
             if upload_response.status_code == 200:
                 new_survey_url = f"{referer}main/file={user}_{survey_name}.csv"
                 st.success("✅ Survey uploaded successfully!")
-                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
-            elif upload_response.status_code == 406:
-                st.error("❌ Upload failed (406 — Not Acceptable). Please ensure you are logged in to SuAVE in the same browser.")
+                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})", unsafe_allow_html=True)
             else:
-                st.error(f"❌ Upload failed: {upload_response.status_code} — {upload_response.reason}")
+                st.error(f"❌ Upload failed ({upload_response.status_code} — {upload_response.reason}). "
+                         f"Please ensure you are logged in to SuAVE in the same browser.")
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
@@ -136,7 +134,7 @@ button_css = """
 <style>
 .back-button {
     display: inline-block;
-    padding: 0.6em  1.2em;
+    padding: 0.6em 1.2em;
     margin-top: 2em;
     font-size: 1.1em;
     font-weight: bold;
