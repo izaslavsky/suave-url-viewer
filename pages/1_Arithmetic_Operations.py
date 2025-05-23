@@ -138,7 +138,7 @@ if st.button("📦 Upload to SuAVE"):
             if dzc_file:
                 data["dzc"] = dzc_file
 
-            upload_response = s.post(upload_url, files=files, data=data, headers=headers)
+            upload_response = s.post(upload_url, files=files, data=data)
 
             log(f"Status: {upload_response.status_code}")
             log(f"Response text: {upload_response.text}")
