@@ -81,7 +81,11 @@ suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📝 Name for New Survey", value=suggested_name)
 
 # Cookie for authentication
-session_id = st.text_input("🔐 Paste your JSESSIONID from suave-net.sdsc.edu cookies:", type="password")
+session_id = st.text_input(
+    "🔐 Paste your JSESSIONID cookie from SuAVE",
+    type="password",
+    help="Open https://suave-net.sdsc.edu/ and log in (or re-login). Then open Developer Tools → Application → Cookies → suave-net.sdsc.edu, and copy the value of the cookie named 'JSESSIONID'."
+)
 
 # Upload
 if st.button("📦 Upload"):
