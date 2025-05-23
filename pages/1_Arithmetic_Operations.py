@@ -120,11 +120,12 @@ if st.button("📦 Upload to SuAVE"):
 
             log("Preparing session and headers")
             s = requests.Session()
-            s.cookies.set("connect.sid", session_cookie, domain=parsed.hostname)
-            headers = {
+            s.cookies.update({ "connect.sid": session_cookie })
+            s.headers.update({
                 "User-Agent": "suave user agent",
-                "referer": referer
-            }
+                "referer": referer,
+                "Cookie": f"connect.sid={session_cookie}"
+            })
 
             log("Sending POST to uploadCSV")
             files = {
