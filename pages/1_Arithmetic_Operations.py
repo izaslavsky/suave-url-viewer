@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import requests
 import io
 from urllib.parse import urlencode, urlparse
@@ -55,10 +56,28 @@ st.subheader("🧮 Define a New Derived Variable")
 numeric_cols = df.select_dtypes(include='number').columns.tolist()
 mode = st.radio("Select Operation Type", ["Binary (e.g. A + B)", "Monadic (e.g. log(A))"])
 
+def apply_mono(series, op):
+    try:
+        if op == "log":
+            return np.log(series)
+        elif op == "sqrt":
+            return np.sqrt(series)
+        elif op == "abs":
+            return np.abs(series)
+        elif op == "square":
+            return series ** 2
+        elif op == "negate":
+            return -series
+    except Exception:
+        return pd.Series([np.nan] * len(series), index=series.index)
+    return series
+
 if mode == "Binary (e.g. A + B)":
     col1 = st.selectbox("➕ First Operand", numeric_cols, key="bin_col1")
+    mono1 = st.selectbox("🔁 Apply to First Operand", ["(none)", "log", "sqrt", "abs", "square", "negate"], key="mono1")
     operation = st.selectbox("⚙️ Operation", ["+", "-", "*", "/"], key="bin_op")
     col2 = st.selectbox("➕ Second Operand", numeric_cols, key="bin_col2")
+    mono2 = st.selectbox("🔁 Apply to Second Operand", ["(none)", "log", "sqrt", "abs", "square", "negate"], key="mono2")
 else:
     monadic_op = st.selectbox("🔁 Unary Operation", ["log", "sqrt", "abs", "square", "negate"], key="mon_op")
     col1 = st.selectbox("🔘 Column to Transform", numeric_cols, key="mono_col")
@@ -70,25 +89,20 @@ round_digits = st.slider("🔢 Decimal places to round", 0, 6, 2)
 if st.button("▶️ Compute"):
     try:
         if mode.startswith("Binary"):
+            s1 = apply_mono(df[col1], mono1) if mono1 != "(none)" else df[col1]
+            s2 = apply_mono(df[col2], mono2) if mono2 != "(none)" else df[col2]
+
             if operation == "+":
-                df[new_var] = df[col1] + df[col2]
+                df[new_var] = s1 + s2
             elif operation == "-":
-                df[new_var] = df[col1] - df[col2]
+                df[new_var] = s1 - s2
             elif operation == "*":
-                df[new_var] = df[col1] * df[col2]
+                df[new_var] = s1 * s2
             elif operation == "/":
-                df[new_var] = df[col1] / df[col2]
+                df[new_var] = s1 / s2
         else:
-            if monadic_op == "log":
-                df[new_var] = np.log(df[col1])
-            elif monadic_op == "sqrt":
-                df[new_var] = np.sqrt(df[col1])
-            elif monadic_op == "abs":
-                df[new_var] = np.abs(df[col1])
-            elif monadic_op == "square":
-                df[new_var] = df[col1] ** 2
-            elif monadic_op == "negate":
-                df[new_var] = -df[col1]
+            s1 = apply_mono(df[col1], monadic_op)
+            df[new_var] = s1
 
         df[new_var] = df[new_var].round(round_digits).where(df[new_var].notna(), '')
 
@@ -99,7 +113,7 @@ if st.button("▶️ Compute"):
         st.dataframe(df[[col1, new_var]].head())
     except Exception as e:
         st.error(f"❌ Error computing new variable: {e}")
-        
+
 # ---- Upload to SuAVE ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
@@ -120,7 +134,6 @@ if st.button("📦 Upload to SuAVE"):
             referer = survey_url.split("/main")[0] + "/"
             upload_url = referer + "uploadCSV"
 
-            # Create session and login
             s = requests.Session()
             headers = {
                 "User-Agent": "suave user agent",
@@ -140,22 +153,10 @@ if st.button("📦 Upload to SuAVE"):
             if login_response.status_code != 200:
                 st.error(f"❌ Login failed (status {login_response.status_code})")
             else:
-                # Prepare CSV and upload
-                
-                # Use modified_df if it exists
-
-
-                # Ensure that we upload the DataFrame that includes the computed variable
-                if "last_new_var" in st.session_state and st.session_state.last_new_var in df.columns:
-                    df_to_upload = df
-                elif "modified_df" in st.session_state:
-                    df_to_upload = st.session_state.modified_df
-                else:
-                    df_to_upload = df
+                df_to_upload = st.session_state.get("modified_df", df)
 
                 csv_buffer = io.StringIO()
                 df_to_upload.to_csv(csv_buffer, index=False)
-
                 csv_buffer.seek(0)
 
                 files = {
@@ -171,7 +172,6 @@ if st.button("📦 Upload to SuAVE"):
 
                 if "last_new_var" in st.session_state:
                     st.info(f"🔄 The variable **{st.session_state.last_new_var}** will be included in the uploaded survey.")
-
 
                 upload_response = s.post(upload_url, files=files, data=data, headers=headers)
 
