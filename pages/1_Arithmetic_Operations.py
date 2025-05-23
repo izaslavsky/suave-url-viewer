@@ -69,8 +69,12 @@ if st.button("▶️ Compute"):
             df[new_var] = df[col1] * df[col2]
         elif operation == "/":
             df[new_var] = df[col1] / df[col2]
-
         df[new_var] = df[new_var].where(df[new_var].notna(), '')
+
+        # ✅ Save the modified DataFrame
+        st.session_state.modified_df = df.copy()
+        st.session_state.last_new_var = new_var
+
         st.success(f"✅ New column '{new_var}' added.")
         st.dataframe(df[[col1, col2, new_var]].head())
     except Exception as e:
@@ -117,8 +121,13 @@ if st.button("📦 Upload to SuAVE"):
                 st.error(f"❌ Login failed (status {login_response.status_code})")
             else:
                 # Prepare CSV and upload
+                
+                # Use modified_df if it exists
+                df_to_upload = st.session_state.get("modified_df", df)
+
                 csv_buffer = io.StringIO()
-                df.to_csv(csv_buffer, index=False)
+                df_to_upload.to_csv(csv_buffer, index=False)
+
                 csv_buffer.seek(0)
 
                 files = {
@@ -131,6 +140,10 @@ if st.button("📦 Upload to SuAVE"):
                 }
                 if dzc_file:
                     data["dzc"] = dzc_file
+
+                if "last_new_var" in st.session_state:
+                    st.info(f"🔄 The variable **{st.session_state.last_new_var}** will be included in the uploaded survey.")
+
 
                 upload_response = s.post(upload_url, files=files, data=data, headers=headers)
 
