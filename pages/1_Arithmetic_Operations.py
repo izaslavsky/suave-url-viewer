@@ -19,7 +19,7 @@ dzc_file = query_params.get("dzc", None)
 st.title("➕ Arithmetic Operations")
 st.markdown("**Create new derived variables using arithmetic formulas, and publish back to SuAVE.**")
 
-# ---- Collapsible diagnostics ----
+# ---- Diagnostics and Input Info ----
 with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.markdown(f"🧪 <span style='font-size: 0.85em;'>**Streamlit version:** {st.__version__}</span>", unsafe_allow_html=True)
     st.markdown(f"👤 <span style='font-size: 0.85em;'>**User:** {user}</span>", unsafe_allow_html=True)
@@ -69,7 +69,8 @@ if st.button("▶️ Compute"):
             df[new_var] = df[col1] * df[col2]
         elif operation == "/":
             df[new_var] = df[col1] / df[col2]
-        df[new_var] = df[new_var].where(df[new_var].notna(), '')
+
+        df[new_var] = df[new_var].where(df[new_var].notna(), '')  # leave blank if NaN
         st.success(f"✅ New column '{new_var}' added.")
         st.dataframe(df[[col1, col2, new_var]].head())
     except Exception as e:
@@ -78,31 +79,34 @@ if st.button("▶️ Compute"):
 # ---- Save and publish back ----
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
-st.markdown("Ensure you are logged into SuAVE in the same browser session before clicking upload.")
 
 base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
 suggested_name = f"{base_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 survey_name = st.text_input("📛 Name for New Survey:", value=suggested_name)
 
+st.markdown("🔐 Make sure you are **logged in to SuAVE** in this browser before publishing. The app does not request your password.")
+
 if st.button("📦 Upload to SuAVE"):
     if not survey_name or not user:
-        st.warning("⚠️ Please fill in all fields before uploading.")
+        st.warning("⚠️ Please enter a valid survey name and user.")
     else:
         try:
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
             upload_url = referer + "uploadCSV"
 
+            # Save CSV to memory
             csv_buffer = io.StringIO()
             df.to_csv(csv_buffer, index=False)
             csv_buffer.seek(0)
 
+            s = requests.Session()
             headers = {
                 "User-Agent": "suave user agent",
                 "referer": referer
             }
 
-            s = requests.Session()
+            # Use existing browser session authentication
             files = {
                 "file": (f"{survey_name}.csv", csv_buffer.getvalue())
             }
@@ -119,6 +123,8 @@ if st.button("📦 Upload to SuAVE"):
                 new_survey_url = f"{referer}main/file={user}_{survey_name}.csv"
                 st.success("✅ Survey uploaded successfully!")
                 st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
+            elif upload_response.status_code == 406:
+                st.error("❌ Upload failed (406 — Not Acceptable). Please ensure you are logged in to SuAVE in the same browser.")
             else:
                 st.error(f"❌ Upload failed: {upload_response.status_code} — {upload_response.reason}")
         except Exception as e:
@@ -126,11 +132,11 @@ if st.button("📦 Upload to SuAVE"):
 
 # ---- Return to Home button ----
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
-button_css = '''
+button_css = """
 <style>
 .back-button {
     display: inline-block;
-    padding: 0.6em 1.2em;
+    padding: 0.6em  1.2em;
     margin-top: 2em;
     font-size: 1.1em;
     font-weight: bold;
@@ -145,6 +151,6 @@ button_css = '''
     color: white !important;
 }
 </style>
-'''
+"""
 st.markdown(button_css, unsafe_allow_html=True)
 st.markdown(f'<a href="/?{param_str}" class="back-button">⬅️ Return to Home</a>', unsafe_allow_html=True)
