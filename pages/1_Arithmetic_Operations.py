@@ -124,9 +124,8 @@ if st.button("📦 Upload to SuAVE"):
                 st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
             else:
                 st.error(f"❌ Upload failed ({upload_response.status_code} — {upload_response.reason}).")
-                st.markdown("**Server response:**")
-                st.code(upload_response.text, language='text')
-
+                st.markdown("#### 🔍 Server Response:")
+                st.code(upload_response.text or "(no response body)", language="text")
         except Exception as e:
             st.error(f"❌ Failed to upload: {e}")
 
