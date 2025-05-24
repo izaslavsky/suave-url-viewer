@@ -9,6 +9,9 @@ from datetime import datetime
 # ---- Page config ----
 st.set_page_config(page_title="Arithmetic Operations", layout="wide")
 
+import sys, os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 # ---- Read query params from URL ----
 query_params = st.query_params
 user = query_params.get("user", None)
@@ -118,6 +121,8 @@ if st.button("▶️ Compute"):
 st.markdown("---")
 st.subheader("📤 Publish Back to SuAVE")
 
+from suave_uploader import upload_to_suave
+
 auth_user = st.text_input("🔐 SuAVE Login:")
 auth_password = st.text_input("🔑 SuAVE Password:", type="password")
 
@@ -129,62 +134,29 @@ if st.button("📦 Upload to SuAVE"):
     if not survey_name or not auth_user or not auth_password:
         st.warning("⚠️ Please fill in all fields before uploading.")
     else:
-        try:
-            parsed = urlparse(survey_url)
-            referer = survey_url.split("/main")[0] + "/"
-            upload_url = referer + "uploadCSV"
+        df_to_upload = st.session_state.get("modified_df", df)
 
-            s = requests.Session()
-            headers = {
-                "User-Agent": "suave user agent",
-                "referer": referer
-            }
+        if "last_new_var" in st.session_state:
+            st.info(f"🔄 The variable **{st.session_state.last_new_var}** will be included in the uploaded survey.")
 
-            login_response = s.post(
-                referer,
-                headers=headers,
-                data={
-                    "user": auth_user,
-                    "pass": auth_password,
-                    "remember-me": "true"
-                }
-            )
+        parsed = urlparse(survey_url)
+        referer = survey_url.split("/main")[0] + "/"
 
-            if login_response.status_code != 200:
-                st.error(f"❌ Login failed (status {login_response.status_code})")
-            else:
-                df_to_upload = st.session_state.get("modified_df", df)
+        success, message, new_url = upload_to_suave(
+            df_to_upload,
+            survey_name,
+            auth_user,
+            auth_password,
+            referer,
+            dzc_file=dzc_file
+        )
 
-                csv_buffer = io.StringIO()
-                df_to_upload.to_csv(csv_buffer, index=False)
-                csv_buffer.seek(0)
+        if success:
+            st.success(message)
+            st.markdown(f"🔗 [Open New Survey in SuAVE]({new_url})")
+        else:
+            st.error(f"❌ {message}")
 
-                files = {
-                    "file": (f"{survey_name}.csv", csv_buffer.getvalue())
-                }
-
-                data = {
-                    "name": survey_name,
-                    "user": auth_user
-                }
-                if dzc_file:
-                    data["dzc"] = dzc_file
-
-                if "last_new_var" in st.session_state:
-                    st.info(f"🔄 The variable **{st.session_state.last_new_var}** will be included in the uploaded survey.")
-
-                upload_response = s.post(upload_url, files=files, data=data, headers=headers)
-
-                if upload_response.status_code == 200:
-                    new_survey_url = f"{referer}main/file={auth_user}_{survey_name}.csv"
-                    st.success("✅ Survey uploaded successfully!")
-                    st.markdown(f"🔗 [Open New Survey in SuAVE]({new_survey_url})")
-                else:
-                    st.error(f"❌ Upload failed ({upload_response.status_code} — {upload_response.reason})")
-                    st.markdown(f"🔍 Server Response:\n\n{upload_response.text}")
-
-        except Exception as e:
-            st.error(f"❌ Upload failed due to error: {e}")
 
 # ---- Return to Home button ----
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
