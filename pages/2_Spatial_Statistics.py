@@ -334,14 +334,15 @@ if st.session_state.gwr_results is not None:
         st.session_state.gwr_df[renamed] = coeff_df[col]
         possible_vars.append(renamed)
 
-    # Residuals and Moran's I
+    # Residuals
     if "residual" in st.session_state.gwr_df.columns:
-        res_col = "residual#number" if not "residual".endswith("#number") else "residual"
+        res_col = "residual#number"
         st.session_state.gwr_df[res_col] = st.session_state.gwr_df["residual"]
         possible_vars.append(res_col)
 
+    # Local Moran's I
     if "local_I" in st.session_state.gwr_df.columns:
-        li_col = "local_I#number" if not "local_I".endswith("#number") else "local_I"
+        li_col = "local_I#number"
         st.session_state.gwr_df[li_col] = st.session_state.gwr_df["local_I"]
         possible_vars.append(li_col)
 
@@ -366,7 +367,7 @@ if st.session_state.gwr_results is not None:
                 if var in st.session_state.gwr_df.columns:
                     df_with_gwr[var] = st.session_state.gwr_df[var]
 
-            st.session_state.modified_df = df_with_gwr  # for safe reuse if needed
+            st.session_state.modified_df = df_with_gwr  # for uploader
 
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
@@ -385,7 +386,6 @@ if st.session_state.gwr_results is not None:
                 st.markdown(f"🔗 [Open New Survey in SuAVE]({new_url})")
             else:
                 st.error(f"❌ {message}")
-
 
 
 # ---- Return to Home button ----
