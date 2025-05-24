@@ -319,37 +319,41 @@ if st.session_state.gwr_results is not None:
 
     # Build derived variables
     possible_vars = []
-    coeff_cols = ['Intercept'] + st.session_state.independent_vars
-    coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
-    coeff_df.index = st.session_state.gwr_df.index
+    gwr_df = st.session_state.gwr_df.copy()
+
+    # Add residual#number
+    if "residual" in gwr_df.columns:
+        gwr_df["residual#number"] = gwr_df["residual"]
+        possible_vars.append("residual#number")
+
+    # Add local_I#number
+    if "local_I" in gwr_df.columns:
+        gwr_df["local_I#number"] = gwr_df["local_I"]
+        possible_vars.append("local_I#number")
 
     # Add coefficient columns with clear names
+    coeff_cols = ['Intercept'] + st.session_state.independent_vars
+    coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
+    coeff_df.index = gwr_df.index
+
     for col in coeff_df.columns:
         if col == "Intercept":
-            renamed = "Intercept#number" if not col.endswith("#number") else col
+            new_name = "Intercept#number" if "#number" not in col else col
         else:
-            renamed = f"coef_{col}"
-            if not renamed.endswith("#number"):
-                renamed += "#number"
-        st.session_state.gwr_df[renamed] = coeff_df[col]
-        possible_vars.append(renamed)
+            new_name = f"coef_{col}#number"
+        gwr_df[new_name] = coeff_df[col]
+        possible_vars.append(new_name)
 
-    # Residuals
-    if "residual" in st.session_state.gwr_df.columns:
-        res_col = "residual#number"
-        st.session_state.gwr_df[res_col] = st.session_state.gwr_df["residual"]
-        possible_vars.append(res_col)
-
-    # Local Moran's I
-    if "local_I" in st.session_state.gwr_df.columns:
-        li_col = "local_I#number"
-        st.session_state.gwr_df[li_col] = st.session_state.gwr_df["local_I"]
-        possible_vars.append(li_col)
+    # Update the session so upload picks it up
+    st.session_state.modified_df = df.copy()
+    for var in possible_vars:
+        if var in gwr_df.columns:
+            st.session_state.modified_df[var] = gwr_df[var]
 
     selected_vars = st.multiselect(
         "🧠 Select GWR-derived variables to include",
-        sorted(set(possible_vars)),
-        default=sorted(set(possible_vars))
+        sorted(possible_vars),
+        default=sorted(possible_vars)
     )
 
     auth_user = st.text_input("🔐 SuAVE Login:")
@@ -362,18 +366,14 @@ if st.session_state.gwr_results is not None:
         if not auth_user or not auth_pass or not survey_name:
             st.warning("⚠️ Please fill in all required fields.")
         else:
-            df_with_gwr = df.copy()
-            for var in selected_vars:
-                if var in st.session_state.gwr_df.columns:
-                    df_with_gwr[var] = st.session_state.gwr_df[var]
-
-            st.session_state.modified_df = df_with_gwr  # for uploader
+            df_to_upload = st.session_state.modified_df.copy()
+            df_to_upload = df_to_upload[df.columns.tolist() + selected_vars]
 
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
 
             success, message, new_url = upload_to_suave(
-                df_with_gwr,
+                df_to_upload,
                 survey_name,
                 auth_user,
                 auth_pass,
