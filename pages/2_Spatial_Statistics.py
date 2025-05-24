@@ -317,38 +317,42 @@ if st.session_state.gwr_results is not None:
         "- **coef_<var>#number**: Local regression coefficient for `<var>` estimated by GWR"
     )
 
-    # Build derived variables
     possible_vars = []
-    gwr_df = st.session_state.gwr_df.copy()
+    base_gwr_df = st.session_state.gwr_df.copy()
 
-    # Add residual#number
-    if "residual" in gwr_df.columns:
-        gwr_df["residual#number"] = gwr_df["residual"]
+    # Ensure residual#number is available
+    if "residual" in base_gwr_df.columns:
+        if "residual#number" not in base_gwr_df.columns:
+            base_gwr_df["residual#number"] = base_gwr_df["residual"]
         possible_vars.append("residual#number")
 
-    # Add local_I#number
-    if "local_I" in gwr_df.columns:
-        gwr_df["local_I#number"] = gwr_df["local_I"]
+    # Ensure local_I#number is available
+    if "local_I" in base_gwr_df.columns:
+        if "local_I#number" not in base_gwr_df.columns:
+            base_gwr_df["local_I#number"] = base_gwr_df["local_I"]
         possible_vars.append("local_I#number")
 
-    # Add coefficient columns with clear names
+    # Add coefficient variables with correct naming
     coeff_cols = ['Intercept'] + st.session_state.independent_vars
     coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
-    coeff_df.index = gwr_df.index
+    coeff_df.index = base_gwr_df.index
 
     for col in coeff_df.columns:
         if col == "Intercept":
             new_name = "Intercept#number" if "#number" not in col else col
         else:
-            new_name = f"coef_{col}#number"
-        gwr_df[new_name] = coeff_df[col]
+            sanitized = col if "#number" not in col else col.replace("#number", "")
+            new_name = f"coef_{sanitized}#number"
+        base_gwr_df[new_name] = coeff_df[col]
         possible_vars.append(new_name)
 
-    # Update the session so upload picks it up
-    st.session_state.modified_df = df.copy()
+    # Attach all GWR vars to the original df
+    df_with_gwr = df.copy()
     for var in possible_vars:
-        if var in gwr_df.columns:
-            st.session_state.modified_df[var] = gwr_df[var]
+        if var in base_gwr_df.columns:
+            df_with_gwr[var] = base_gwr_df[var]
+
+    st.session_state.modified_df = df_with_gwr
 
     selected_vars = st.multiselect(
         "🧠 Select GWR-derived variables to include",
@@ -366,8 +370,7 @@ if st.session_state.gwr_results is not None:
         if not auth_user or not auth_pass or not survey_name:
             st.warning("⚠️ Please fill in all required fields.")
         else:
-            df_to_upload = st.session_state.modified_df.copy()
-            df_to_upload = df_to_upload[df.columns.tolist() + selected_vars]
+            df_to_upload = st.session_state.modified_df[df.columns.tolist() + selected_vars]
 
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
