@@ -147,13 +147,16 @@ numeric_cols = gdf.select_dtypes(include='number').columns.tolist()
 dependent_var = st.selectbox("📌 Select Dependent Variable", numeric_cols)
 independent_vars = st.multiselect("📈 Select Independent Variables", numeric_cols, default=numeric_cols[:2])
 
-# ---- Run GWR and store results ----
+# ---- Run GWR and save session state ----
 if st.button("▶️ Run GWR") and dependent_var and independent_vars:
     gwr_df = gdf[[dependent_var] + independent_vars + ["geometry"]].copy()
     n_before = len(gwr_df)
     gwr_df = gwr_df.dropna()
     n_after = len(gwr_df)
-    st.session_state.residuals_dropped = n_before - n_after
+    dropped = n_before - n_after
+    st.session_state.residuals_dropped = dropped
+
+    st.info(f"📉 Running GWR on {n_after} observations. {dropped} row(s) with missing values were excluded.")
 
     coords = list(zip(gwr_df.geometry.centroid.x, gwr_df.geometry.centroid.y))
     y = gwr_df[[dependent_var]].values
@@ -316,25 +319,31 @@ if st.session_state.gwr_results is not None:
 
     # Build derived variables
     possible_vars = []
-
     coeff_cols = ['Intercept'] + st.session_state.independent_vars
     coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
     coeff_df.index = st.session_state.gwr_df.index
 
     # Add coefficient columns with clear names
     for col in coeff_df.columns:
-        renamed = f"coef_{col}#number"
+        if col == "Intercept":
+            renamed = "Intercept#number" if not col.endswith("#number") else col
+        else:
+            renamed = f"coef_{col}"
+            if not renamed.endswith("#number"):
+                renamed += "#number"
         st.session_state.gwr_df[renamed] = coeff_df[col]
         possible_vars.append(renamed)
 
     # Residuals and Moran's I
     if "residual" in st.session_state.gwr_df.columns:
-        st.session_state.gwr_df["residual#number"] = st.session_state.gwr_df["residual"]
-        possible_vars.append("residual#number")
+        res_col = "residual#number" if not "residual".endswith("#number") else "residual"
+        st.session_state.gwr_df[res_col] = st.session_state.gwr_df["residual"]
+        possible_vars.append(res_col)
 
     if "local_I" in st.session_state.gwr_df.columns:
-        st.session_state.gwr_df["local_I#number"] = st.session_state.gwr_df["local_I"]
-        possible_vars.append("local_I#number")
+        li_col = "local_I#number" if not "local_I".endswith("#number") else "local_I"
+        st.session_state.gwr_df[li_col] = st.session_state.gwr_df["local_I"]
+        possible_vars.append(li_col)
 
     selected_vars = st.multiselect(
         "🧠 Select GWR-derived variables to include",
@@ -357,7 +366,7 @@ if st.session_state.gwr_results is not None:
                 if var in st.session_state.gwr_df.columns:
                     df_with_gwr[var] = st.session_state.gwr_df[var]
 
-            st.session_state.modified_df = df_with_gwr  # save for uploader
+            st.session_state.modified_df = df_with_gwr  # for safe reuse if needed
 
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
@@ -376,6 +385,7 @@ if st.session_state.gwr_results is not None:
                 st.markdown(f"🔗 [Open New Survey in SuAVE]({new_url})")
             else:
                 st.error(f"❌ {message}")
+
 
 
 # ---- Return to Home button ----
