@@ -300,24 +300,50 @@ if st.session_state.gwr_results is not None:
     except Exception as e:
         st.error(f"❌ Moran's I computation failed: {e}")
 
-    # ---- SuAVE Upload ----
-    st.markdown("---")
-    st.subheader("📤 Publish GWR Results to SuAVE")
+# ---- SuAVE Upload (Optional) ----
+st.markdown("---")
+st.subheader("📤 Publish GWR Results to SuAVE")
 
+if st.session_state.gwr_results is not None:
     from suave_uploader import upload_to_suave
 
-    # Identify available GWR-generated columns
-    derived_cols = ['residual#number', 'local_I#number'] + [col for col in gwr_df.columns if col.endswith('#number') and col not in df.columns]
+    st.markdown(
+        "The following variables are derived from GWR and can be added to a new survey:\n"
+        "- **residual#number**: Difference between observed and predicted values\n"
+        "- **local_I#number**: Local Moran's I statistic (spatial autocorrelation)\n"
+        "- **coef_<var>#number**: Local regression coefficient for `<var>` estimated by GWR"
+    )
+
+    # Build derived variables
+    possible_vars = []
+
+    coeff_cols = ['Intercept'] + st.session_state.independent_vars
+    coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
+    coeff_df.index = st.session_state.gwr_df.index
+
+    # Add coefficient columns with clear names
+    for col in coeff_df.columns:
+        renamed = f"coef_{col}#number"
+        st.session_state.gwr_df[renamed] = coeff_df[col]
+        possible_vars.append(renamed)
+
+    # Residuals and Moran's I
+    if "residual" in st.session_state.gwr_df.columns:
+        st.session_state.gwr_df["residual#number"] = st.session_state.gwr_df["residual"]
+        possible_vars.append("residual#number")
+
+    if "local_I" in st.session_state.gwr_df.columns:
+        st.session_state.gwr_df["local_I#number"] = st.session_state.gwr_df["local_I"]
+        possible_vars.append("local_I#number")
 
     selected_vars = st.multiselect(
         "🧠 Select GWR-derived variables to include",
-        sorted(set(derived_cols)),
-        default=sorted(set(derived_cols))
+        sorted(set(possible_vars)),
+        default=sorted(set(possible_vars))
     )
 
     auth_user = st.text_input("🔐 SuAVE Login:")
     auth_pass = st.text_input("🔑 SuAVE Password:", type="password")
-
     base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
     suggested_name = f"{base_name}_GWR_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     survey_name = st.text_input("📛 New Survey Name", value=suggested_name)
@@ -328,16 +354,13 @@ if st.session_state.gwr_results is not None:
         else:
             df_with_gwr = df.copy()
             for var in selected_vars:
-                if var in gwr_df.columns:
-                    df_with_gwr[var] = gwr_df[var]
+                if var in st.session_state.gwr_df.columns:
+                    df_with_gwr[var] = st.session_state.gwr_df[var]
 
-            # Save for uploader
-            st.session_state.modified_df = df_with_gwr
-            st.session_state.last_new_var = ", ".join(selected_vars)
+            st.session_state.modified_df = df_with_gwr  # save for uploader
 
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
-            dzc_file = query_params.get("dzc", None)
 
             success, message, new_url = upload_to_suave(
                 df_with_gwr,
@@ -345,7 +368,7 @@ if st.session_state.gwr_results is not None:
                 auth_user,
                 auth_pass,
                 referer,
-                dzc_file=dzc_file
+                dzc_file=query_params.get("dzc", None)
             )
 
             if success:
