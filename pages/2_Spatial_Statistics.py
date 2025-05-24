@@ -2,6 +2,10 @@ import streamlit as st
 st.set_page_config(page_title="Spatial Statistics", layout="wide")
 
 # ---- Import dependencies ----
+from urllib.parse import urlparse
+from datetime import datetime
+
+
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -278,6 +282,50 @@ if st.session_state.gwr_results is not None:
 
     except Exception as e:
         st.error(f"❌ Moran's I computation failed: {e}")
+
+# ---- SuAVE Upload (Optional) ----
+st.markdown("---")
+st.subheader("📤 Publish GWR Results to SuAVE")
+
+if st.session_state.gwr_results is not None:
+    possible_vars = ['residual', 'local_I']
+    coeff_cols = ['Intercept'] + st.session_state.independent_vars
+    coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
+    coeff_df.index = st.session_state.gwr_df.index
+    for col in coeff_df.columns:
+        st.session_state.gwr_df[col] = coeff_df[col]
+        possible_vars.append(col)
+
+    all_vars = df.columns.tolist() + [v for v in possible_vars if v not in df.columns]
+    selected_vars = st.multiselect("🧠 Select GWR-derived variables to include", possible_vars, default=possible_vars)
+
+    auth_user = st.text_input("🔐 SuAVE Login:")
+    auth_pass = st.text_input("🔑 SuAVE Password:", type="password")
+    base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
+    suggested_name = f"{base_name}_GWR_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    survey_name = st.text_input("📛 New Survey Name", value=suggested_name)
+
+    if st.button("📦 Upload to SuAVE"):
+        if not auth_user or not auth_pass or not survey_name:
+            st.warning("⚠️ Please fill in all required fields.")
+        else:
+            from suave_uploader import upload_to_suave
+            df_with_gwr = df.copy()
+            for var in selected_vars:
+                if var in st.session_state.gwr_df.columns:
+                    df_with_gwr[var] = st.session_state.gwr_df[var]
+
+            parsed = urlparse(survey_url)
+            referer = survey_url.split("/main")[0] + "/"
+            success, message, new_url = upload_to_suave(df_with_gwr, survey_name, auth_user, auth_pass, referer, dzc_file=query_params.get("dzc", None))
+
+            if success:
+                st.success(message)
+                st.markdown(f"🔗 [Open New Survey in SuAVE]({new_url})")
+            else:
+                st.error(f"❌ {message}")
+
+
 
 # ---- Return to Home button ----
 param_str = urlencode({k: v[0] if isinstance(v, list) else v for k, v in query_params.items()})
