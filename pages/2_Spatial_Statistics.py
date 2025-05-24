@@ -332,33 +332,36 @@ if st.session_state.gwr_results is not None:
     )
 
     possible_vars = []
+    gwr_df = st.session_state.gwr_df
 
-    # Add GWR coefficients
+    # ---- Add coefficients
     coeff_cols = ['Intercept'] + st.session_state.independent_vars
     coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
-    coeff_df.index = st.session_state.gwr_df.index
+    coeff_df.index = gwr_df.index
 
     for col in coeff_df.columns:
         if col == "Intercept":
             name = "Intercept#number"
         else:
             name = f"coef_{col}#number"
-        if name not in st.session_state.gwr_df.columns:
-            st.session_state.gwr_df[name] = coeff_df[col]
+        if name not in gwr_df.columns:
+            gwr_df[name] = coeff_df[col]
         possible_vars.append(name)
 
-    # Add residual and local_I, only once
-    if "residual" in st.session_state.gwr_df.columns:
-        if "residual#number" not in st.session_state.gwr_df.columns:
-            st.session_state.gwr_df["residual#number"] = st.session_state.gwr_df["residual"]
-        possible_vars.append("residual#number")
+    # ---- Add residuals and local Moran’s I
+    if "residual" in gwr_df.columns:
+        res_name = "residual#number"
+        if res_name not in gwr_df.columns:
+            gwr_df[res_name] = gwr_df["residual"]
+        possible_vars.append(res_name)
 
-    if "local_I" in st.session_state.gwr_df.columns:
-        if "local_I#number" not in st.session_state.gwr_df.columns:
-            st.session_state.gwr_df["local_I#number"] = st.session_state.gwr_df["local_I"]
-        possible_vars.append("local_I#number")
+    if "local_I" in gwr_df.columns:
+        local_name = "local_I#number"
+        if local_name not in gwr_df.columns:
+            gwr_df[local_name] = gwr_df["local_I"]
+        possible_vars.append(local_name)
 
-    # Upload UI
+    # ---- User Selection
     selected_vars = st.multiselect(
         "🧠 Select GWR-derived variables to include",
         sorted(set(possible_vars)),
@@ -375,10 +378,11 @@ if st.session_state.gwr_results is not None:
         if not auth_user or not auth_pass or not survey_name:
             st.warning("⚠️ Please fill in all required fields.")
         else:
+            # Append selected GWR variables to original df
             df_with_gwr = df.copy()
             for var in selected_vars:
-                if var in st.session_state.gwr_df.columns:
-                    df_with_gwr[var] = st.session_state.gwr_df[var]
+                if var in gwr_df.columns:
+                    df_with_gwr[var] = gwr_df[var]
 
             st.session_state.modified_df = df_with_gwr
 
@@ -399,6 +403,7 @@ if st.session_state.gwr_results is not None:
                 st.markdown(f"🔗 [Open New Survey in SuAVE]({new_url})")
             else:
                 st.error(f"❌ {message}")
+
 
 
 # ---- Return to Home button ----
