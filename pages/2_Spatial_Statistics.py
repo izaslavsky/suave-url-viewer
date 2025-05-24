@@ -2,44 +2,43 @@ import streamlit as st
 st.set_page_config(page_title="Spatial Statistics", layout="wide")
 
 # ---- Import dependencies ----
-from urllib.parse import urlparse
-from datetime import datetime
-
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))  # so it finds suave_uploader.py
-from suave_uploader import upload_to_suave
-
-
+import sys
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import requests
 import io
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
+from datetime import datetime
 from mgwr.gwr import GWR
 from mgwr.sel_bw import Sel_BW
-import folium
-import streamlit_folium
 from shapely.geometry import Point
 from libpysal.weights import Queen, KNN
 from esda.moran import Moran, Moran_Local
+import folium
+import streamlit_folium
 import json
 import branca.colormap as cm
+
+# ---- Ensure uploader import path ----
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from suave_uploader import upload_to_suave
 
 # ---- Read query params from URL ----
 query_params = st.query_params
 user = query_params.get("user", None)
 csv_filename = query_params.get("csv", None)
 survey_url = query_params.get("surveyurl", None)
+dzc_file = query_params.get("dzc", None)
 
 
-# ---- Page title and description ----
+# ---- Page Title and Description ----
 st.title("📊 Spatial Statistics")
 st.markdown("**Geographically-Weighted Regression with Residuals and Autocorrelation Measures.**")
 st.markdown("For polygon data, GWR uses Queen Weights; for point data, it uses 5-nearest-neighbors weights.")
 
-# ---- Collapsible diagnostics ----
+# ---- Collapsible Diagnostics ----
 with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.markdown(f"🧪 <span style='font-size: 0.85em;'>**Streamlit version:** {st.__version__}</span>", unsafe_allow_html=True)
     st.markdown(f"👤 <span style='font-size: 0.85em;'>**User:** {user}</span>", unsafe_allow_html=True)
@@ -68,7 +67,8 @@ with st.expander("⚙️ Diagnostics and Input Info", expanded=False):
     st.write(df.dtypes.head())
     st.write(df.head(2))
 
-# ---- Geometry detection ----
+
+# ---- Geometry Detection ----
 gdf = None
 geometry_col = next((col for col in df.columns if "geometry" in col.lower()), None)
 lat_col = next((col for col in df.columns if "latitude" in col.lower()), None)
@@ -92,11 +92,10 @@ else:
     st.error("❌ Could not detect valid geometry. Ensure a WKT column or Latitude/Longitude columns are present.")
     st.stop()
 
-# ---- Scroll hint ----
+# ---- Scroll Hint ----
 st.markdown("<div style='font-size:0.9em; margin-bottom: -1em;'>⬇️ <i>Scroll down for analysis and model output...</i></div>", unsafe_allow_html=True)
 
-
-# ---- Initialize session state ----
+# ---- Initialize Session State ----
 if "gwr_results" not in st.session_state:
     st.session_state.gwr_results = None
     st.session_state.gwr_df = None
@@ -106,7 +105,7 @@ if "gwr_results" not in st.session_state:
     st.session_state.independent_vars = None
     st.session_state.residuals_dropped = 0
 
-# ---- Display map of input features ----
+# ---- Map Display ----
 st.subheader("🌍 Map of Features")
 try:
     centroid = gdf.geometry.centroid.unary_union.centroid
@@ -141,13 +140,14 @@ else:
 
 streamlit_folium.st_folium(m, width=800, height=500)
 
+
 # ---- GWR variable selection ----
 st.markdown("---")
 numeric_cols = gdf.select_dtypes(include='number').columns.tolist()
 dependent_var = st.selectbox("📌 Select Dependent Variable", numeric_cols)
 independent_vars = st.multiselect("📈 Select Independent Variables", numeric_cols, default=numeric_cols[:2])
 
-# ---- Run GWR and save session state ----
+# ---- Run GWR and store results ----
 if st.button("▶️ Run GWR") and dependent_var and independent_vars:
     gwr_df = gdf[[dependent_var] + independent_vars + ["geometry"]].copy()
     n_before = len(gwr_df)
@@ -170,6 +170,7 @@ if st.button("▶️ Run GWR") and dependent_var and independent_vars:
     st.session_state.dependent_var = dependent_var
     st.session_state.independent_vars = independent_vars
 
+
 # ---- Display GWR results ----
 if st.session_state.gwr_results is not None:
     gwr_results = st.session_state.gwr_results
@@ -182,39 +183,50 @@ if st.session_state.gwr_results is not None:
     st.success(f"✅ Bandwidth selected: {bw}")
     st.write("R² Score:", gwr_results.R2)
 
-    coeffs_df = pd.DataFrame(gwr_results.params, columns=['Intercept'] + independent_vars)
-    st.subheader("📋 Coefficient Summary")
-    st.dataframe(coeffs_df)
+    # Add coefficients to DataFrame
+    coeff_cols = ['Intercept'] + independent_vars
+    coeff_df = pd.DataFrame(gwr_results.params, columns=coeff_cols)
+    coeff_df.index = gwr_df.index
+    for col in coeff_df.columns:
+        coeff_col_name = f"{col}#number"
+        gwr_df[coeff_col_name] = coeff_df[col]
 
+    # Add residuals
+    gwr_df["residual#number"] = gwr_results.resid_response.flatten()
+    gwr_df["fitted#number"] = gwr_results.predy.flatten()
+
+    # Store for upload
+    st.session_state.modified_df = pd.merge(
+        df.copy(),
+        gwr_df[[f"{col}#number" for col in coeff_df.columns] + ["residual#number", "fitted#number"]],
+        left_index=True,
+        right_index=True,
+        how="left"
+    )
+    st.session_state.last_new_var = "GWR output"
+
+    # Show table
+    st.subheader("📋 GWR Coefficient Summary")
+    st.dataframe(coeff_df.head())
+
+    # Download buttons
     coeff_csv = io.StringIO()
-    coeffs_df.to_csv(coeff_csv, index=False)
+    coeff_df.to_csv(coeff_csv, index=False)
     st.download_button("⬇️ Download Coefficients", data=coeff_csv.getvalue(), file_name="gwr_coefficients.csv", mime="text/csv")
 
-    geometry_ids = df.loc[gwr_df.index].get("geometry_id", gwr_df.index)
-    residuals_df = pd.DataFrame({
-        "geometry_id": geometry_ids,
-        "fitted": gwr_results.predy.flatten(),
-        "residual": gwr_results.resid_response.flatten()
-    })
+    residuals_csv = io.StringIO()
+    gwr_df[["residual#number", "fitted#number"]].to_csv(residuals_csv, index=False)
+    st.download_button("⬇️ Download Residuals & Fitted Values", data=residuals_csv.getvalue(), file_name="gwr_residuals.csv", mime="text/csv")
 
-    res_csv = io.StringIO()
-    residuals_df.to_csv(res_csv, index=False)
-    st.download_button("⬇️ Download Residuals & Predictions", data=res_csv.getvalue(), file_name="gwr_residuals.csv", mime="text/csv")
 
-    if st.session_state.residuals_dropped > 0:
-        st.warning(f"Dropped {st.session_state.residuals_dropped} rows with missing values before running GWR.")
-
-    gwr_df = gwr_df.copy()
-    gwr_df["residual"] = gwr_results.resid_response.flatten()
-
-    # ---- Residual Map ----
-    st.subheader("🗺️ Residuals Choropleth")
+    # ---- Residual Choropleth Map ----
+    st.subheader("🗺️ Residuals Choropleth Map")
     res_map = folium.Map(location=center, zoom_start=4, tiles="CartoDB positron")
 
     if gwr_df.geometry.geom_type.iloc[0] == 'Point':
-        colormap = cm.linear.RdYlBu_11.scale(gwr_df["residual"].min(), gwr_df["residual"].max())
+        colormap = cm.linear.RdYlBu_11.scale(gwr_df["residual#number"].min(), gwr_df["residual#number"].max())
         for _, row in gwr_df.iterrows():
-            color = colormap(row["residual"])
+            color = colormap(row["residual#number"])
             folium.CircleMarker(
                 location=[row.geometry.y, row.geometry.x],
                 radius=5,
@@ -222,7 +234,7 @@ if st.session_state.gwr_results is not None:
                 fill_opacity=0.8,
                 color=color,
                 fill_color=color,
-                tooltip=f"Residual: {row['residual']:.3f}"
+                tooltip=f"Residual: {row['residual#number']:.3f}"
             ).add_to(res_map)
         colormap.caption = "Residuals"
         colormap.add_to(res_map)
@@ -230,7 +242,7 @@ if st.session_state.gwr_results is not None:
         folium.Choropleth(
             geo_data=json.loads(gwr_df.to_crs("EPSG:4326").to_json()),
             data=gwr_df.reset_index(),
-            columns=["index", "residual"],
+            columns=["index", "residual#number"],
             key_on="feature.id",
             fill_color="RdYlBu",
             fill_opacity=0.7,
@@ -240,7 +252,7 @@ if st.session_state.gwr_results is not None:
 
     streamlit_folium.st_folium(res_map, width=800, height=500)
 
-    # ---- Global & Local Moran's I ----
+    # ---- Global and Local Moran's I ----
     st.subheader("🧪 Global Moran's I")
     try:
         if isinstance(gwr_df, gpd.GeoDataFrame) and gwr_df.geometry.geom_type.iloc[0] == 'Point':
@@ -248,18 +260,19 @@ if st.session_state.gwr_results is not None:
         else:
             w = Queen.from_dataframe(gwr_df)
         w.transform = 'r'
-        moran = Moran(gwr_df["residual"], w)
+        moran = Moran(gwr_df["residual#number"], w)
         st.write(f"Moran's I: {moran.I:.4f}, p-value: {moran.p_sim:.4f}")
 
+        # Local Moran
         st.subheader("🧭 Local Moran's I Map")
-        moran_loc = Moran_Local(gwr_df["residual"], w)
-        gwr_df["local_I"] = moran_loc.Is
+        moran_loc = Moran_Local(gwr_df["residual#number"], w)
+        gwr_df["local_I#number"] = moran_loc.Is
 
         local_map = folium.Map(location=center, zoom_start=4, tiles="CartoDB positron")
         if gwr_df.geometry.geom_type.iloc[0] == 'Point':
-            colormap = cm.linear.PuOr_11.scale(gwr_df["local_I"].min(), gwr_df["local_I"].max())
+            colormap = cm.linear.PuOr_11.scale(gwr_df["local_I#number"].min(), gwr_df["local_I#number"].max())
             for _, row in gwr_df.iterrows():
-                color = colormap(row["local_I"])
+                color = colormap(row["local_I#number"])
                 folium.CircleMarker(
                     location=[row.geometry.y, row.geometry.x],
                     radius=5,
@@ -267,7 +280,7 @@ if st.session_state.gwr_results is not None:
                     fill_opacity=0.8,
                     color=color,
                     fill_color=color,
-                    tooltip=f"Local I: {row['local_I']:.3f}"
+                    tooltip=f"Local I: {row['local_I#number']:.3f}"
                 ).add_to(local_map)
             colormap.caption = "Local Moran's I"
             colormap.add_to(local_map)
@@ -275,7 +288,7 @@ if st.session_state.gwr_results is not None:
             folium.Choropleth(
                 geo_data=json.loads(gwr_df.to_crs("EPSG:4326").to_json()),
                 data=gwr_df.reset_index(),
-                columns=["index", "local_I"],
+                columns=["index", "local_I#number"],
                 key_on="feature.id",
                 fill_color="PuOr",
                 fill_opacity=0.7,
@@ -284,42 +297,27 @@ if st.session_state.gwr_results is not None:
             ).add_to(local_map)
 
         streamlit_folium.st_folium(local_map, width=800, height=500)
-
     except Exception as e:
         st.error(f"❌ Moran's I computation failed: {e}")
 
-# ---- SuAVE Upload (Optional) ----
-st.markdown("---")
-st.subheader("📤 Publish GWR Results to SuAVE")
+    # ---- SuAVE Upload ----
+    st.markdown("---")
+    st.subheader("📤 Publish GWR Results to SuAVE")
 
-if st.session_state.gwr_results is not None:
-    # Import uploader safely
-    import sys, os
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from suave_uploader import upload_to_suave
 
-    # List available output vars
-    possible_vars = ['residual', 'local_I']
-    coeff_cols = ['Intercept'] + st.session_state.independent_vars
-    coeff_df = pd.DataFrame(st.session_state.gwr_results.params, columns=coeff_cols)
-    coeff_df.index = st.session_state.gwr_df.index
-    for col in coeff_df.columns:
-        gwr_col = col.strip() + "#number"
-        st.session_state.gwr_df[gwr_col] = coeff_df[col]
-        possible_vars.append(gwr_col)
+    # Identify available GWR-generated columns
+    derived_cols = ['residual#number', 'local_I#number'] + [col for col in gwr_df.columns if col.endswith('#number') and col not in df.columns]
 
-    if "residual" in st.session_state.gwr_df.columns:
-        st.session_state.gwr_df["residual#number"] = st.session_state.gwr_df["residual"]
-        possible_vars.append("residual#number")
+    selected_vars = st.multiselect(
+        "🧠 Select GWR-derived variables to include",
+        sorted(set(derived_cols)),
+        default=sorted(set(derived_cols))
+    )
 
-    if "local_I" in st.session_state.gwr_df.columns:
-        st.session_state.gwr_df["local_I#number"] = st.session_state.gwr_df["local_I"]
-        possible_vars.append("local_I#number")
-
-    # Upload form
-    selected_vars = st.multiselect("🧠 Select GWR-derived variables to include", sorted(set(possible_vars)), default=sorted(set(possible_vars)))
     auth_user = st.text_input("🔐 SuAVE Login:")
     auth_pass = st.text_input("🔑 SuAVE Password:", type="password")
+
     base_name = csv_filename.replace(".csv", "").split("_", 1)[-1]
     suggested_name = f"{base_name}_GWR_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     survey_name = st.text_input("📛 New Survey Name", value=suggested_name)
@@ -330,19 +328,24 @@ if st.session_state.gwr_results is not None:
         else:
             df_with_gwr = df.copy()
             for var in selected_vars:
-                clean_var = var.replace("#number", "")
-                if clean_var in st.session_state.gwr_df.columns:
-                    df_with_gwr[var] = st.session_state.gwr_df[clean_var]
+                if var in gwr_df.columns:
+                    df_with_gwr[var] = gwr_df[var]
+
+            # Save for uploader
+            st.session_state.modified_df = df_with_gwr
+            st.session_state.last_new_var = ", ".join(selected_vars)
 
             parsed = urlparse(survey_url)
             referer = survey_url.split("/main")[0] + "/"
+            dzc_file = query_params.get("dzc", None)
+
             success, message, new_url = upload_to_suave(
                 df_with_gwr,
                 survey_name,
                 auth_user,
                 auth_pass,
                 referer,
-                dzc_file=query_params.get("dzc", None)
+                dzc_file=dzc_file
             )
 
             if success:
@@ -358,7 +361,7 @@ button_css = """
 <style>
 .back-button {
     display: inline-block;
-    padding: 0.6em  1.2em;
+    padding: 0.6em 1.2em;
     margin-top: 2em;
     font-size: 1.1em;
     font-weight: bold;
