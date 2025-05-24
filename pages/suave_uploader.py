@@ -3,20 +3,6 @@ import requests
 import io
 
 def upload_to_suave(df, survey_name, user, password, referer, dzc_file=None):
-    """
-    Upload a DataFrame to SuAVE as a new survey.
-
-    Parameters:
-    - df: pandas.DataFrame to upload
-    - survey_name: name for the new survey (without .csv)
-    - user: SuAVE username
-    - password: SuAVE password
-    - referer: base URL of the SuAVE instance (e.g., 'https://suave-net.sdsc.edu/')
-    - dzc_file: optional deep zoom config string
-
-    Returns:
-    - (success_flag: bool, message: str, new_survey_url: str or None)
-    """
     s = requests.Session()
     headers = {
         "User-Agent": "suave user agent",
